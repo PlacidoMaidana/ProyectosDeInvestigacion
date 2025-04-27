@@ -226,25 +226,25 @@ class App:
             messagebox.showinfo("Éxito", f"Base de datos guardada como: {db_path}")
             
     def import_from_bib(self):
-        """Manejador para la importación BibTeX"""
         if not self.current_db_path:
             messagebox.showerror("Error", "Primero abra una base de datos")
             return
 
         try:
-            # Usar with para manejo automático de recursos
-            with BibImporter(self.current_db_path) as importer:
-                imported_count = importer.import_bib_file(self.root)
+            # Usar la instancia existente (self.bib_importer) en lugar de crear una nueva
+            imported_count = self.bib_importer.import_bib_file(self.root)
 
-                if imported_count > 0:
-                    self.refresh_documents_list()
-                    messagebox.showinfo("Éxito", f"Se importaron {imported_count} documentos")
-                else:
-                    messagebox.showinfo("Información", "No se importaron nuevos documentos")
+            if imported_count > 0:
+                self.refresh_documents_list()
+                messagebox.showinfo("Éxito", f"Importados {imported_count} documentos")
+                self.save_database()  
+            else:
+                messagebox.showinfo("Info", "No se importaron documentos nuevos")
 
         except Exception as e:
-            messagebox.showerror("Error", f"Error durante la importación: {str(e)}")
-
+            messagebox.showerror("Error", f"Fallo en importación: {str(e)}")
+        
+        
         
     def refresh_documents_list(self):
         """Actualiza la lista de documentos con los datos más recientes"""

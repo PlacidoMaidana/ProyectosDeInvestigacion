@@ -3,146 +3,85 @@ import sqlite3
 from tkinter import filedialog, messagebox
 import tkinter as tk
 from typing import Optional
+import bibtexparser
+from bibtexparser.bparser import BibTexParser
+from bibtexparser.customization import convert_to_unicode
 
 class BibImporter:
-    def __init__(self, db_path: str = None):
-        """Inicializa con ruta a la base de datos (opcional)"""
+    def __init__(self, db_path: str):
+        """Inicializa con ruta obligatoria a la base de datos"""
+        if not db_path:
+            raise ValueError("Se requiere ruta de base de datos")
         self.db_path = db_path
-        self.conn = None
-        print(f"la ruta de la base de datos en bib_importer constructor {db_path}")
-        
-    def connect(self, db_path: Optional[str] = None) -> bool:
+        self.conn = None  # Conexión se creará cuando sea necesario
+
+    def connect(self) -> bool:
         """Establece conexión a la base de datos"""
-        print(f"la ruta de la base de datos en bib_importer connect {db_path}")
-        if db_path:
-            self.db_path = db_path
-        
-        if not self.db_path:
-            messagebox.showerror("Error", "No se ha especificado la ruta a la base de datos")
-            return False
-        
         try:
-            self.conn = sqlite3.connect(self.db_path)
-            # Activar foreign keys si es necesario
-            self.conn.execute("PRAGMA foreign_keys = ON")
+            if self.conn is None:
+                print(f"Conectando a BD en: {self.db_path}")  # Debug
+                self.conn = sqlite3.connect(self.db_path)
+                self.conn.execute("PRAGMA foreign_keys = ON")
             return True
         except sqlite3.Error as e:
-            messagebox.showerror("Error", f"No se pudo conectar a la base de datos: {str(e)}")
+            messagebox.showerror("Error", f"Conexión fallida: {str(e)}")
             return False
-    
+
     def disconnect(self):
-        """Cierra la conexión a la base de datos"""
+        """Cierra la conexión de forma segura"""
         if self.conn:
             self.conn.close()
             self.conn = None
-    
+
     def __enter__(self):
-        """Para uso con context manager"""
+        """Para context manager"""
         self.connect()
         return self
-    
+
     def __exit__(self, exc_type, exc_val, exc_tb):
-        """Para uso con context manager"""
+        """Garantiza que la conexión se cierre"""
         self.disconnect()
-    
-    def parse_bib_file(self, filepath: str) -> Optional[list]:
-        """Parsea archivo .bib con manejo de errores mejorado"""
-        try:
-            with open(filepath, 'r', encoding='utf-8') as f:
-                content = f.read()
-            
-            entries = []
-            # Expresión regular mejorada para mayor robustez
-            entry_pattern = re.compile(
-                r'@(?P<type>\w+)\s*{\s*(?P<key>[^,\s]+)\s*,\s*(?P<fields>.*?)(?=\s*@|\s*$)',
-                re.DOTALL | re.UNICODE
-            )
-            
-            for match in entry_pattern.finditer(content):
-                entry = {
-                    'cite_key': match.group('key'),
-                    'type': match.group('type'),
-                    'fields': {}
-                }
-                
-                # Parseo de campos con manejo de comillas y llaves
-                field_pattern = re.compile(
-                    r'(?P<name>\w+)\s*=\s*(?P<value>\{.*?\}|".*?"|\w+)',
-                    re.DOTALL | re.UNICODE
-                )
-                
-                for field_match in field_pattern.finditer(match.group('fields')):
-                    field_name = field_match.group('name').lower()
-                    field_value = field_match.group('value')
-                    
-                    # Eliminar llaves/comillas exteriores
-                    if field_value.startswith('{') and field_value.endswith('}'):
-                        field_value = field_value[1:-1]
-                    elif field_value.startswith('"') and field_value.endswith('"'):
-                        field_value = field_value[1:-1]
-                    
-                    entry['fields'][field_name] = field_value.strip()
-                
-                entries.append(entry)
-            
-            return entries
-        
-        except UnicodeDecodeError:
-            messagebox.showerror("Error", "El archivo no está en UTF-8. Por favor guarda el archivo con codificación UTF-8.")
-            return None
-        except Exception as e:
-            messagebox.showerror("Error", f"Error al procesar el archivo .bib: {str(e)}")
-            return None
+
     def insert_entry(self, entry: dict) -> bool:
-        """Inserta una entrada individual con manejo de transacciones"""
-        if not self.conn:
-            if not self.connect():
-                return False
+        """Inserta una entrada con manejo robusto de conexión"""
+        if not self.connect():  # Asegura conexión activa
+            return False
 
         try:
             cursor = self.conn.cursor()
+            
+            # Construcción segura de la consulta
+            columns = ['cite_key', 'title', 'author', 'year', 'abstract', 
+                      'scolr_tags', 'etiqueta', 'cumplimiento_de_criterios', 'referencia_apa']
+            
+            # Preparar valores (manejo de None)
+            values = (
+                entry['cite_key'],
+                entry['fields'].get('title', ''),
+                entry['fields'].get('author', '').replace(' and ', '; '),
+                int(entry['fields'].get('year', 0)) if entry['fields'].get('year', '').isdigit() else None,
+                entry['fields'].get('abstract', ''),
+                entry['fields'].get('keywords', ''),
+                entry['type'],
+                '',
+                self.generate_apa_citation(entry)
+            )
 
-            # Construcción de la consulta SQL segura
-            columns = []
-            placeholders = []
-            values = []
-
-            field_mapping = {
-                'cite_key': entry['cite_key'],
-                'title': entry['fields'].get('title', ''),
-                'author': entry['fields'].get('author', '').replace(' and ', '; '),
-                'year': int(entry['fields'].get('year', 0)) if entry['fields'].get('year', '').isdigit() else None,
-                'abstract': entry['fields'].get('abstract', ''),
-                'scolr_tags': entry['fields'].get('keywords', ''),
-                'etiqueta': entry['type'],
-                'cumplimiento_de_criterios': '',
-                'referencia_apa': self.generate_apa_citation(entry)
-            }
-
-            for col, val in field_mapping.items():
-                if val is not None:  # Incluir todos los campos excepto None explícito
-                    columns.append(f'"{col}"')  # Entre comillas para nombres con mayúsculas
-                    placeholders.append('?')
-                    values.append(val)
-
-            if not columns:
-                return False
-
-            query = f"""
-                INSERT INTO documentos ({', '.join(columns)})
-                VALUES ({', '.join(placeholders)})
+            query = """
+                INSERT INTO documentos 
+                (cite_key, title, author, year, abstract, 
+                 scolr_tags, etiqueta, cumplimiento_de_criterios, referencia_apa)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             """
-
-            print(f"Ejecutando consulta: {query}")  # Debug
-            print(f"Con valores: {values}")  # Debug
-
+            
             cursor.execute(query, values)
             self.conn.commit()  # Commit explícito
+            print(f"Documento insertado: {entry['cite_key']}")  # Debug
             return True
-
+            
         except sqlite3.Error as e:
             self.conn.rollback()
-            print(f"Error en inserción: {str(e)}")  # Debug
+            print(f"Error al insertar {entry['cite_key']}: {str(e)}")  # Debug
             return False
     
            
@@ -192,8 +131,61 @@ class BibImporter:
         
         return ' '.join(citation_parts)
     
+    def parse_bib_file(self, filepath: str) -> list:
+        """Analiza un archivo BibTeX y devuelve una lista de entradas estructuradas.
+
+        Args:
+            filepath: Ruta al archivo .bib a analizar
+
+        Returns:
+            Lista de diccionarios con la estructura:
+            [
+                {
+                    'type': 'article|book|etc',
+                    'cite_key': 'clave_de_referencia',
+                    'fields': {
+                        'title': '...',
+                        'author': '...',
+                        'year': '...',
+                        # otros campos...
+                    }
+                },
+                # más entradas...
+            ]
+        """
+        try:
+            with open(filepath, 'r', encoding='utf-8') as bibfile:
+                # Configurar el parser para mayor compatibilidad
+                parser = BibTexParser()
+                parser.customization = convert_to_unicode
+                parser.ignore_nonstandard_types = False
+                parser.homogenize_fields = True
+
+                bib_database = bibtexparser.load(bibfile, parser=parser)
+
+                # Convertir a nuestro formato estándar
+                entries = []
+                for entry in bib_database.entries:
+                    processed_entry = {
+                        'type': entry['ENTRYTYPE'],
+                        'cite_key': entry['ID'],
+                        'fields': {k.lower(): v for k, v in entry.items() 
+                                  if k not in ['ENTRYTYPE', 'ID']}
+                    }
+                    entries.append(processed_entry)
+
+                return entries
+
+        except FileNotFoundError:
+            messagebox.showerror("Error", f"No se encontró el archivo: {filepath}")
+            return []
+        except Exception as e:
+            messagebox.showerror("Error", f"Error al analizar el archivo BibTeX: {str(e)}")
+            return []
+        
     def import_bib_file(self, parent_window=None) -> int:
-        """Flujo completo de importación con manejo de conexión"""
+        """Flujo completo de importación con manejo de conexión y transacción"""
+
         if not self.db_path:
             messagebox.showerror("Error", "Primero configure la ruta a la base de datos")
             return 0
@@ -207,26 +199,61 @@ class BibImporter:
         if not filepath:
             return 0
 
+        success_count = 0
+        entries = self.parse_bib_file(filepath)
+        if not entries:
+            return 0
+
+        progress = self.show_progress_dialog(parent_window, len(entries))
+
         try:
-            if not self.connect():
+            if not self.connect():  # Abrir conexión al principio
                 return 0
 
-            entries = self.parse_bib_file(filepath)
-            if not entries:
-                return 0
-
-            success_count = 0
-            progress = self.show_progress_dialog(parent_window, len(entries))
+            cursor = self.conn.cursor()  # Obtener el cursor una vez
 
             for i, entry in enumerate(entries, 1):
-                if self.insert_entry(entry):  # <-- Aquí se llama a insert_entry()
-                    success_count += 1
+                try:
+                    # Construcción segura de la consulta
+                    columns = ['cite_key', 'title', 'author', 'year', 'abstract',
+                            'scolr_tags', 'etiqueta', 'cumplimiento_de_criterios', 'referencia_apa']
 
-                if progress and progress.winfo_exists():
-                    progress.update_progress(i, len(entries))
-                else:
-                    break
-                
+                    # Preparar valores (manejo de None)
+                    values = (
+                        entry['cite_key'],
+                        entry['fields'].get('title', ''),
+                        entry['fields'].get('author', '').replace(' and ', '; '),
+                        int(entry['fields'].get('year', 0)) if entry['fields'].get('year', '').isdigit() else None,
+                        entry['fields'].get('abstract', ''),
+                        entry['fields'].get('keywords', ''),
+                        entry['type'],
+                        '',
+                        self.generate_apa_citation(entry)
+                    )
+
+                    query = """
+                        INSERT INTO documentos
+                        (cite_key, title, author, year, abstract,
+                        scolr_tags, etiqueta, cumplimiento_de_criterios, referencia_apa)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """
+
+                    cursor.execute(query, values)
+                    success_count += 1  # Incrementar solo si la inserción tiene éxito
+                    print(f"Documento insertado: {entry['cite_key']}")  # Debug
+                except sqlite3.Error as insert_error:
+                    print(f"Error al insertar {entry['cite_key']}: {str(insert_error)}")  # Debug
+                    self.conn.rollback()  # Rollback en error individual
+                except Exception as e:
+                    print(f"Error inesperado al insertar {entry['cite_key']}: {e}")
+                    self.conn.rollback()  # Rollback en error inesperado
+                finally:
+                    if progress and progress.winfo_exists():
+                        progress.update_progress(i, len(entries))
+                    else:
+                        break  # Si se cierra la ventana de progreso
+
+            self.conn.commit()  # Commit al final de todas las inserciones
             messagebox.showinfo(
                 "Importación completada",
                 f"Proceso finalizado.\nDocumentos importados: {success_count}\nErrores: {len(entries) - success_count}"
@@ -234,13 +261,16 @@ class BibImporter:
             return success_count
 
         except Exception as e:
+            self.conn.rollback()  # Rollback en error general
             messagebox.showerror("Error crítico", f"Error durante la importación: {str(e)}")
+            print(f"Error de importación: {e}")  # Log del error general
             return 0
+
         finally:
-            self.disconnect()
-            if 'progress' in locals() and progress.winfo_exists():
+            self.disconnect()  # Cerrar conexión al final
+            if progress and progress.winfo_exists():
                 progress.destroy()
-            
+                    
     def show_progress_dialog(self, parent, total_entries):
         """Muestra diálogo de progreso (implementación básica)"""
         # Implementación de un diálogo de progreso personalizado
