@@ -6,6 +6,10 @@ from analisis import AnalysisForm  # Archivo que maneja la ficha de análisis
 from proyecto import ProyectoManager  # Importar el gestor de proyectos
 from bib_importer import BibImporter
 import sqlite3 
+from importar_enlaces import importar_enlaces
+
+
+
 
 # Crear una instancia global (o puedes pasarla como parámetro)
 list_manager = ListManager()
@@ -50,12 +54,19 @@ class App:
             command=self.import_from_bib,
             state=tk.DISABLED  # Inicialmente deshabilitado
         )
+        # Nueva opción: Importar desde Excel
+        self.import_menu.add_command(
+            label="Importar desde Excel",
+            command=self.import_links_from_excel,  # Método que implementamos para importar enlaces desde Excel
+            state=tk.NORMAL  # Activado de forma predeterminada, puedes cambiarlo si lo necesitas
+        )
+        
         self.menu_bar.add_cascade(label="Importaciones", menu=self.import_menu)
 
         # Configurar Treeview
         self.tree = ttk.Treeview(
             self.master,
-            columns=("Cid", "CiteKey", "Title", "Author", "Year", "Etiqueta", "Cumplimiento", "ReferenciaAPA", "Actions"),
+            columns=("Cid", "CiteKey", "Title", "Author", "Year", "Etiqueta", "Cumplimiento", "ReferenciaAPA","Enlace", "Actions"),
             show="headings"
         )
         self.tree.heading("Cid", text="ID")
@@ -66,6 +77,7 @@ class App:
         self.tree.heading("Etiqueta", text="Etiqueta")
         self.tree.heading("Cumplimiento", text="Cumplimiento de Criterios")
         self.tree.heading("ReferenciaAPA", text="Referencia APA")
+        self.tree.heading("Enlace", text="Enlace")
         self.tree.heading("Actions", text="Acciones")
 
         self.tree.column("Cid", width=50, anchor="center")
@@ -76,6 +88,7 @@ class App:
         self.tree.column("Etiqueta", width=100, anchor="center")
         self.tree.column("Cumplimiento", width=150, anchor="center")
         self.tree.column("ReferenciaAPA", width=200, anchor="center")
+        self.tree.column("Enlace", width=200, anchor="center")
         self.tree.column("Actions", width=120, anchor="center")
 
         self.tree.bind("<Button-1>", self.on_tree_click)
@@ -104,6 +117,7 @@ class App:
 
         self.current_db_path = new_db_path  # Actualizar ruta actual
         self.refresh_ui()  # Refrescar la interfaz (cargar datos en Treeview)
+        
     def refresh_ui(self):
         try:
             # Limpiar los elementos existentes en el Treeview
@@ -112,7 +126,7 @@ class App:
     
             # Obtener todos los registros de la base de datos activa
             cursor = self.db_connection.conn.cursor()
-            query = "SELECT Cid, cite_key, title, author, year, etiqueta, cumplimiento_de_criterios, referencia_apa FROM documentos"
+            query = "SELECT Cid, cite_key, title, author, year, etiqueta, cumplimiento_de_criterios, referencia_apa, enlace FROM documentos"
             cursor.execute(query)
             rows = cursor.fetchall()
     
@@ -130,18 +144,22 @@ class App:
         
         
     def create_new_database(self):
-        db_path = filedialog.asksaveasfilename(defaultextension=".db", filetypes=[("SQLite Database", "*.db")])
+        db_path = filedialog.asksaveasfilename(
+            defaultextension=".db", 
+            filetypes=[("SQLite Database", "*.db")]
+        )
         if db_path:
             try:
-                self.current_db_path = db_path
-                init_db(self.current_db_path)
-                self.bib_importer = BibImporter(self.current_db_path)  # Actualizar el importer
-                self.import_menu.entryconfig(0, state=tk.NORMAL)  # Habilitar el menú
-                self.load_documents()
+                # Inicializar la nueva base de datos
+                init_db(db_path)  # Crear la base con su esquema inicial
+
+                # Cambiar a la nueva base usando switch_database
+                self.switch_database(db_path)
+
                 messagebox.showinfo("Éxito", f"Se creó una nueva base de datos: {db_path}")
+
             except Exception as e:
-                messagebox.showerror("Error", f"Hubo un problema al crear la base de datos: {e}")
-    
+                messagebox.showerror("Error", f"Hubo un problema al crear la base de datos: {str(e)}")
  
     
     # Añade este nuevo método para manejar clics en el Treeview
@@ -149,7 +167,7 @@ class App:
         region = self.tree.identify("region", event.x, event.y)
         column = self.tree.identify_column(event.x)
 
-        if region == "cell" and column == "#9":  # Asegúrate que sea la columna correcta (Actions)
+        if region == "cell" and column == "#10":  # Asegúrate que sea la columna correcta (Actions)
             self.on_action_click(event)
             
     # Configurar clic en la columna de "Acciones"
@@ -184,12 +202,12 @@ class App:
     # Modifica el método load_documents:
     def load_documents(self):
         # Cargar documentos desde la base de datos y actualizar la grilla
-        conn = connect_to_db(current_db_path)
-        cursor = conn.cursor()
-        cursor.execute("SELECT Cid, cite_key, title, author, year, etiqueta, cumplimiento_de_criterios, referencia_apa FROM documentos")
+        self.db_connection.conn = sqlite3.connect(self.current_db_path)
+        cursor = self.db_connection.conn.cursor()
+         
+        cursor.execute("SELECT Cid, cite_key, title, author, year, etiqueta, cumplimiento_de_criterios, referencia_apa, enlace FROM documentos")
         rows = cursor.fetchall()
-        conn.close()
-    
+        
         self.tree.delete(*self.tree.get_children())
         for row in rows:
             self.tree.insert("", "end", values=(*row, "📝 Analizar"))  # Icono añadido aquí
@@ -261,13 +279,38 @@ class App:
             current_db_path = db_path
             messagebox.showinfo("Éxito", f"Base de datos guardada como: {db_path}")
             
+            
+            
+ 
+ 
+ 
+ 
+            
+ # <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+ # <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+ # <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+ # <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+ #                            IMPORTACIONES
+ # <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<  
+ # <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<  
+ # <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<  
+ # <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<  
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+          
     def import_from_bib(self):
         if not self.current_db_path:
             messagebox.showerror("Error", "Primero abra una base de datos")
             return
 
         try:
-            # Usar la instancia existente (self.bib_importer) en lugar de crear una nueva
+             # Crear una nueva instancia de BibImporter
+            self.bib_importer = BibImporter(self.current_db_path)
             imported_count = self.bib_importer.import_bib_file(self.master)
 
             if imported_count > 0:
@@ -280,7 +323,24 @@ class App:
         except Exception as e:
             messagebox.showerror("Error", f"Fallo en importación: {str(e)}")
         
-        
+ 
+
+    def import_links_from_excel(self):
+        if not self.current_db_path:
+            messagebox.showerror("Error", "Primero abra una base de datos.")
+            return
+
+        try:
+            ruta_archivo = filedialog.askopenfilename(filetypes=[("Excel Files", "*.xlsx")])
+            if ruta_archivo:
+                imported_count = importar_enlaces(ruta_archivo, self.current_db_path)
+                if imported_count > 0:
+                    self.refresh_documents_list()
+                    messagebox.showinfo("Éxito", f"Importados {imported_count} enlaces.")
+                else:
+                    messagebox.showinfo("Info", "No se importaron enlaces nuevos.")
+        except Exception as e:
+            messagebox.showerror("Error", f"Fallo en importación: {str(e)}")       
         
     def refresh_documents_list(self):
         """Actualiza la lista de documentos con los datos más recientes"""
@@ -300,7 +360,7 @@ class App:
             # Consulta segura con nombres de columnas explícitos
             safe_query = """
                 SELECT "Cid", "cite_key", "title", "author", "year", 
-                       "etiqueta", "cumplimiento_de_criterios", "referencia_apa" 
+                       "etiqueta", "cumplimiento_de_criterios", "referencia_apa", "enlace" 
                 FROM "documentos"
                 ORDER BY "Cid" DESC
             """
@@ -379,13 +439,19 @@ class App:
             if not confirm:
                 return
 
-            conn = connect_to_db(self.current_db_path)  # Usar la variable de instancia
-            cursor = conn.cursor()
+            #conn = connect_to_db(self.current_db_path)  # Usar la variable de instancia
+            # Obtener la base de datos activa
+            cursor = self.db_connection.conn.cursor()
+            
+            #cursor = conn.cursor()
 
             # Usar el nombre correcto de la columna (Cid)
             cursor.execute("DELETE FROM documentos WHERE Cid = ?", (document_id,))
-            conn.commit()
-            conn.close()
+            
+            self.db_connection.conn.commit()
+            self.db_connection.conn.close()
+            #conn.commit()
+            #conn.close()
 
             self.load_documents()
             messagebox.showinfo("Éxito", "Documento eliminado exitosamente.")
@@ -416,6 +482,28 @@ class App:
         # Crear una nueva ventana de análisis
         analysis_window = AnalysisForm(self.master, document_id, current_db_path)
         self.analysis_windows[document_id] = analysis_window.window  # Guardar referencia
+
+
+
+
+
+
+
+ # <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+ # <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+ # <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+ #                         FORMULARIO DE DOCUMENTOS
+ # <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<  
+ # <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<  
+ # <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<  
+ # <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<  
+ 
+ 
+ 
+ 
+ 
+
+
 
 # Formulario para manejar creación y edición de documentos
 class DocumentForm:
@@ -509,10 +597,15 @@ class DocumentForm:
             ttk.Label(main_frame, text="Referencia APA:").grid(row=12, column=0, sticky="e", padx=padx_default, pady=pady_default)
             self.referencia_apa_entry = ttk.Entry(main_frame, width=entry_width)
             self.referencia_apa_entry.grid(row=12, column=1, sticky="ew", pady=pady_default)
+         
+            # Referencia APA
+            ttk.Label(main_frame, text="Enlace:").grid(row=13, column=0, sticky="e", padx=padx_default, pady=pady_default)
+            self.enlace_entry = ttk.Entry(main_frame, width=entry_width)
+            self.enlace_entry.grid(row=13, column=1, sticky="ew", pady=pady_default)
 
             # Botón Guardar
             button_frame = ttk.Frame(main_frame)
-            button_frame.grid(row=13, column=0, columnspan=2, pady=(20, 0))
+            button_frame.grid(row=14, column=0, columnspan=2, pady=(20, 0))
 
             ttk.Button(button_frame, text="Guardar", command=self.save_document).pack(pady=10, ipadx=20)
 
@@ -544,7 +637,7 @@ class DocumentForm:
 
                 cursor.execute("""
                     SELECT cite_key, title, author, year, abstract, 
-                           scolr_tags, etiqueta, cumplimiento_de_criterios, referencia_apa 
+                           scolr_tags, etiqueta, cumplimiento_de_criterios, referencia_apa, enlace 
                     FROM documentos 
                     WHERE Cid = ?
                 """, (self.document_id,))
@@ -568,6 +661,7 @@ class DocumentForm:
                 self.combobox_etiquetas.set('')
                 self.cumplimiento_entry.delete(0, tk.END)
                 self.referencia_apa_entry.delete(0, tk.END)
+                self.enlace_entry.delete(0, tk.END)
 
                 # Llenar campos (convertir None a string vacío)
                 self.cite_key_entry.insert(0, document[0] or "")
@@ -579,6 +673,7 @@ class DocumentForm:
                 self.combobox_etiquetas.set(document[6] or "")
                 self.cumplimiento_entry.insert(0, document[7] or "")
                 self.referencia_apa_entry.insert(0, document[8] or "")
+                self.enlace_entry.insert(0, document[8] or "")
 
             except Exception as e:
                 print(f"Error al cargar documento: {str(e)}")
@@ -596,6 +691,7 @@ class DocumentForm:
         etiqueta = self.combobox_etiquetas.get()
         cumplimiento = self.cumplimiento_entry.get()
         referencia_apa = self.referencia_apa_entry.get()
+        enlace = self.enlace_entry.get()
 
         # Validación básica de campos requeridos
         if not all([cite_key, title, author, year]):
@@ -604,7 +700,7 @@ class DocumentForm:
 
         conn = None
         try:
-            conn = connect_to_db(current_db_path)
+            conn = connect_to_db(self.parent_app.current_db_path)
             cursor = conn.cursor()
 
             if self.mode == "create":
@@ -612,7 +708,7 @@ class DocumentForm:
                     INSERT INTO documentos (cite_key, title, author, year, abstract, 
                                         scolr_tags, etiqueta, cumplimiento_de_criterios, referencia_apa)
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """, (cite_key, title, author, year, abstract, scolr_tags, etiqueta, cumplimiento, referencia_apa))
+                """, (cite_key, title, author, year, abstract, scolr_tags, etiqueta, cumplimiento, referencia_apa, enlace))
                 messagebox.showinfo("Éxito", "Documento creado exitosamente.")
             elif self.mode == "edit":
                 cursor.execute("""
@@ -620,7 +716,7 @@ class DocumentForm:
                     SET cite_key = ?, title = ?, author = ?, year = ?, abstract = ?, 
                         scolr_tags = ?, etiqueta = ?, cumplimiento_de_criterios = ?, referencia_apa = ?
                     WHERE Cid = ?
-                """, (cite_key, title, author, year, abstract, scolr_tags, etiqueta, cumplimiento, referencia_apa, self.document_id))
+                """, (cite_key, title, author, year, abstract, scolr_tags, etiqueta, cumplimiento, referencia_apa, enlace, self.document_id))
                 messagebox.showinfo("Éxito", "Documento actualizado exitosamente.")
 
             conn.commit()

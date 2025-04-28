@@ -23,7 +23,8 @@ def init_db(db_path):
         scolr_tags TEXT,
         etiqueta TEXT,
         cumplimiento_de_criterios TEXT,
-        referencia_apa TEXT  
+        referencia_apa TEXT,
+        enlace TEXT  
     )
     """)
     
