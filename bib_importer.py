@@ -184,8 +184,7 @@ class BibImporter:
             return []
         
     def import_bib_file(self, parent_window=None) -> int:
-        """Flujo completo de importación con manejo de conexión y transacción"""
-
+        """Flujo completo de importación con manejo de conexión"""
         if not self.db_path:
             messagebox.showerror("Error", "Primero configure la ruta a la base de datos")
             return 0
@@ -199,61 +198,30 @@ class BibImporter:
         if not filepath:
             return 0
 
-        success_count = 0
-        entries = self.parse_bib_file(filepath)
-        if not entries:
-            return 0
-
-        progress = self.show_progress_dialog(parent_window, len(entries))
-
         try:
-            if not self.connect():  # Abrir conexión al principio
+            if not self.connect():
                 return 0
 
-            cursor = self.conn.cursor()  # Obtener el cursor una vez
+            entries = self.parse_bib_file(filepath)
+            if not entries:
+                return 0
+
+            success_count = 0
+            progress = self.show_progress_dialog(parent_window, len(entries))
 
             for i, entry in enumerate(entries, 1):
                 try:
-                    # Construcción segura de la consulta
-                    columns = ['cite_key', 'title', 'author', 'year', 'abstract',
-                            'scolr_tags', 'etiqueta', 'cumplimiento_de_criterios', 'referencia_apa']
-
-                    # Preparar valores (manejo de None)
-                    values = (
-                        entry['cite_key'],
-                        entry['fields'].get('title', ''),
-                        entry['fields'].get('author', '').replace(' and ', '; '),
-                        int(entry['fields'].get('year', 0)) if entry['fields'].get('year', '').isdigit() else None,
-                        entry['fields'].get('abstract', ''),
-                        entry['fields'].get('keywords', ''),
-                        entry['type'],
-                        '',
-                        self.generate_apa_citation(entry)
-                    )
-
-                    query = """
-                        INSERT INTO documentos
-                        (cite_key, title, author, year, abstract,
-                        scolr_tags, etiqueta, cumplimiento_de_criterios, referencia_apa)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    """
-
-                    cursor.execute(query, values)
-                    success_count += 1  # Incrementar solo si la inserción tiene éxito
-                    print(f"Documento insertado: {entry['cite_key']}")  # Debug
-                except sqlite3.Error as insert_error:
-                    print(f"Error al insertar {entry['cite_key']}: {str(insert_error)}")  # Debug
-                    self.conn.rollback()  # Rollback en error individual
+                    if self.insert_entry(entry):  # <-- Aquí se llama a insert_entry()
+                        success_count += 1
                 except Exception as e:
-                    print(f"Error inesperado al insertar {entry['cite_key']}: {e}")
-                    self.conn.rollback()  # Rollback en error inesperado
-                finally:
-                    if progress and progress.winfo_exists():
-                        progress.update_progress(i, len(entries))
-                    else:
-                        break  # Si se cierra la ventana de progreso
+                    print(f"Error al insertar entrada: {str(e)}")  # Log individual
 
-            self.conn.commit()  # Commit al final de todas las inserciones
+                if progress and progress.winfo_exists():
+                    progress.update_progress(i, len(entries))
+                else:
+                    break
+
+            self.conn.commit()  # Asegurar commit al final de todas las inserciones
             messagebox.showinfo(
                 "Importación completada",
                 f"Proceso finalizado.\nDocumentos importados: {success_count}\nErrores: {len(entries) - success_count}"
@@ -261,14 +229,14 @@ class BibImporter:
             return success_count
 
         except Exception as e:
-            self.conn.rollback()  # Rollback en error general
+            if self.conn:
+                self.conn.rollback()  # Rollback si hay error general
             messagebox.showerror("Error crítico", f"Error durante la importación: {str(e)}")
-            print(f"Error de importación: {e}")  # Log del error general
+            print(f"Error de importación: {str(e)}")  # Log general
             return 0
-
         finally:
-            self.disconnect()  # Cerrar conexión al final
-            if progress and progress.winfo_exists():
+            self.disconnect()
+            if 'progress' in locals() and progress.winfo_exists():
                 progress.destroy()
                     
     def show_progress_dialog(self, parent, total_entries):

@@ -9,39 +9,34 @@ import sqlite3
 
 # Crear una instancia global (o puedes pasarla como parámetro)
 list_manager = ListManager()
-
 # Ventana principal
 class App:
-   
-    def __init__(self, root):
-        self.root = root
-        self.root.title("Gestión de Documentos y Análisis")        
-        self.analysis_windows = {}  # Control de ventanas abiertas
-        
-        # Usa solo la variable de instancia, no la global
-        self.current_db_path = "default_project.db"
-        self.bib_importer = BibImporter(self.current_db_path)  # Pasar la ruta aquí
-          
+    def __init__(self, master):
+        self.master = master
+        self.master.title("Gestión de Documentos y Análisis")
+        self.analysis_windows = {}  # Diccionario para manejar las ventanas de análisis
+
+        # Inicializar atributos
+        self.current_db_path = "default_project.db"  # Ruta inicial predeterminada
+        self.db_connection = None  # Inicialización de la conexión
+        self.bib_importer = None  # Inicialización del importador
         
         # Inicializar archivos CSV al inicio del programa
         list_manager.inicializar_archivos_csv()
-        
-        # Menú principal
-        self.menu_bar = Menu(self.root)
-        self.root.config(menu=self.menu_bar)
-         
 
+        # Menú principal
+        self.menu_bar = Menu(self.master)
+        self.master.config(menu=self.menu_bar)
 
         # Menú Archivo
         self.file_menu = Menu(self.menu_bar, tearoff=0)
         self.menu_bar.add_cascade(label="Archivo", menu=self.file_menu)
-        self.file_menu.add_command(label="Crear Nueva Base de Datos", command=self.create_new_database)  # Nuevo botón
+        self.file_menu.add_command(label="Crear Nueva Base de Datos", command=self.create_new_database)
         self.file_menu.add_command(label="Abrir...", command=self.open_database)
         self.file_menu.add_command(label="Guardar", command=self.save_database)
         self.file_menu.add_command(label="Guardar como...", command=self.save_database_as)
-        
         self.file_menu.add_separator()
-        self.file_menu.add_command(label="Salir", command=self.root.quit)
+        self.file_menu.add_command(label="Salir", command=self.master.quit)
 
         # Menú Proyecto
         self.project_menu = Menu(self.menu_bar, tearoff=0)
@@ -49,20 +44,20 @@ class App:
         self.project_menu.add_command(label="Gestión de Proyectos", command=self.open_project_manager)
 
         # Menú Importaciones
-        import_menu = tk.Menu(self.menu_bar, tearoff=0)
-        import_menu.add_command(
+        self.import_menu = Menu(self.menu_bar, tearoff=0)
+        self.import_menu.add_command(
             label="Importar desde BibTeX",
             command=self.import_from_bib,
-            state=tk.DISABLED  # Inicialmente deshabilitado hasta abrir DB
+            state=tk.DISABLED  # Inicialmente deshabilitado
         )
-        self.menu_bar.add_cascade(label="Importaciones", menu=import_menu)
-        
-        self.root.config(menu=self.menu_bar)
-        self.import_menu = import_menu  # Guardar referencia para actualizar estado
+        self.menu_bar.add_cascade(label="Importaciones", menu=self.import_menu)
 
-
-       # En la configuración inicial del Treeview (__init__):
-        self.tree = ttk.Treeview(root, columns=("Cid", "CiteKey", "Title", "Author", "Year", "Etiqueta", "Cumplimiento", "ReferenciaAPA", "Actions"), show="headings")
+        # Configurar Treeview
+        self.tree = ttk.Treeview(
+            self.master,
+            columns=("Cid", "CiteKey", "Title", "Author", "Year", "Etiqueta", "Cumplimiento", "ReferenciaAPA", "Actions"),
+            show="headings"
+        )
         self.tree.heading("Cid", text="ID")
         self.tree.heading("CiteKey", text="CiteKey")
         self.tree.heading("Title", text="Título")
@@ -73,7 +68,6 @@ class App:
         self.tree.heading("ReferenciaAPA", text="Referencia APA")
         self.tree.heading("Actions", text="Acciones")
 
-        # Configuración de columnas (sin cambios)
         self.tree.column("Cid", width=50, anchor="center")
         self.tree.column("CiteKey", width=100, anchor="center")
         self.tree.column("Title", width=200, anchor="center")
@@ -87,18 +81,54 @@ class App:
         self.tree.bind("<Button-1>", self.on_tree_click)
         self.tree.pack(fill=tk.BOTH, expand=True)
 
-        
-        
-        
-        # **Botones CRUD para documentos**
-        self.crud_frame = tk.Frame(self.root)
+        # Botones CRUD
+        self.crud_frame = tk.Frame(self.master)
         self.crud_frame.pack(pady=10)
-
         Button(self.crud_frame, text="Crear Documento", command=self.create_document).pack(side=tk.LEFT, padx=5)
         Button(self.crud_frame, text="Modificar Documento", command=self.update_document).pack(side=tk.LEFT, padx=5)
         Button(self.crud_frame, text="Eliminar Documento", command=self.delete_document).pack(side=tk.LEFT, padx=5)
 
+        # Conectar a la base de datos por defecto
+        self.switch_database(self.current_db_path)
+
+    def switch_database(self, new_db_path):
+        # Desconectar base anterior
+        if self.db_connection:
+            self.db_connection.disconnect()
+
+        # Conectar a la nueva base
+        self.db_connection = BibImporter(new_db_path)
+        if not self.db_connection.connect():
+            messagebox.showerror("Error", f"No se pudo conectar a la base de datos: {new_db_path}")
+            return
+
+        self.current_db_path = new_db_path  # Actualizar ruta actual
+        self.refresh_ui()  # Refrescar la interfaz (cargar datos en Treeview)
+    def refresh_ui(self):
+        try:
+            # Limpiar los elementos existentes en el Treeview
+            for item in self.tree.get_children():
+                self.tree.delete(item)
     
+            # Obtener todos los registros de la base de datos activa
+            cursor = self.db_connection.conn.cursor()
+            query = "SELECT Cid, cite_key, title, author, year, etiqueta, cumplimiento_de_criterios, referencia_apa FROM documentos"
+            cursor.execute(query)
+            rows = cursor.fetchall()
+    
+            # Insertar cada registro en el Treeview
+            #for row in rows:
+            #    self.tree.insert("", "end", values=row)
+                
+            for row in rows:
+                self.tree.insert("", "end", values=(*row, "📝 Analizar"))  # Icono añadido aquí    
+    
+            print("Interfaz actualizada con los datos de la base de datos activa.")  # Debug
+    
+        except sqlite3.Error as e:
+            messagebox.showerror("Error", f"No se pudo cargar la interfaz: {str(e)}")
+        
+        
     def create_new_database(self):
         db_path = filedialog.asksaveasfilename(defaultextension=".db", filetypes=[("SQLite Database", "*.db")])
         if db_path:
@@ -111,6 +141,8 @@ class App:
                 messagebox.showinfo("Éxito", f"Se creó una nueva base de datos: {db_path}")
             except Exception as e:
                 messagebox.showerror("Error", f"Hubo un problema al crear la base de datos: {e}")
+    
+ 
     
     # Añade este nuevo método para manejar clics en el Treeview
     def on_tree_click(self, event):
@@ -140,14 +172,14 @@ class App:
                     del self.analysis_windows[document_id]
 
             # Abrir nueva ventana de análisis con todos los parámetros necesarios
-            analysis_window = AnalysisForm(self.root, document_id, current_db_path)
+            analysis_window = AnalysisForm(self.master, document_id, self.current_db_path)
             self.analysis_windows[document_id] = analysis_window.window
 
         except Exception as e:
             messagebox.showerror("Error", f"No se pudo abrir el análisis: {str(e)}")
                         
     def open_project_manager(self):
-        ProyectoManager(self.root)        
+        ProyectoManager(self.master)        
                 
     # Modifica el método load_documents:
     def load_documents(self):
@@ -181,7 +213,7 @@ class App:
                 del self.analysis_windows[document_id]  # Remover referencia si no existe
 
         # Abrir una nueva ventana de análisis
-        analysis_window = AnalysisForm(self.root, document_id,current_db_path)
+        analysis_window = AnalysisForm(self.master, document_id,self.current_db_path)
         self.analysis_windows[document_id] = analysis_window.window
 
         # Vincular clic en la columna "Acciones"
@@ -192,12 +224,16 @@ class App:
     def open_database(self):
         db_path = filedialog.askopenfilename(filetypes=[("SQLite Database", "*.db")])
         if db_path:
-            self.current_db_path = db_path
-            init_db(self.current_db_path)
-            self.bib_importer = BibImporter(self.current_db_path)  # Actualizar el importer
-            self.load_documents()
-            self.import_menu.entryconfig(0, state=tk.NORMAL)  # Habilitar el menú
-            messagebox.showinfo("Éxito", f"Base de datos abierta: {db_path}")
+            try:
+                # Llamamos al método switch_database para cambiar a la nueva base de datos
+                self.switch_database(db_path)
+
+                # Habilitar el menú de importación si la conexión es exitosa
+                self.import_menu.entryconfig(0, state=tk.NORMAL)
+                messagebox.showinfo("Éxito", f"Base de datos abierta: {db_path}")
+
+            except Exception as e:
+                messagebox.showerror("Error", f"No se pudo abrir la base de datos: {str(e)}")
             
     def save_database(self):
         """Guarda los cambios pendientes en la base de datos actual"""
@@ -232,7 +268,7 @@ class App:
 
         try:
             # Usar la instancia existente (self.bib_importer) en lugar de crear una nueva
-            imported_count = self.bib_importer.import_bib_file(self.root)
+            imported_count = self.bib_importer.import_bib_file(self.master)
 
             if imported_count > 0:
                 self.refresh_documents_list()
@@ -287,29 +323,34 @@ class App:
         
     def create_document(self):
         # Abrir el formulario para crear un documento
-        DocumentForm(self.root, mode="create")
+        DocumentForm(self.master, mode="create")
+        
+        
     def update_document(self):
-        selected_item = self.tree.selection()
-        if not selected_item:
-            messagebox.showwarning("Advertencia", "Por favor selecciona un documento.")
-            return
-
-        try:
-            item_values = self.tree.item(selected_item[0])["values"]
-            if not item_values:
-                messagebox.showerror("Error", "El documento seleccionado no tiene datos válidos.")
+            selected_item = self.tree.selection()
+            if not selected_item:
+                messagebox.showwarning("Advertencia", "Por favor selecciona un documento.")
                 return
 
-            document_id = item_values[0]
-            print(f"Preparando para editar documento ID: {document_id}")  # Debug
+            try:
+                item_values = self.tree.item(selected_item[0])["values"]
+                if not item_values:
+                    messagebox.showerror("Error", "El documento seleccionado no tiene datos válidos.")
+                    return
 
-            # Pasar la referencia de la app principal al formulario
-            form = DocumentForm(self.root, mode="edit", document_id=document_id)
-            form.parent_app = self  # Esto permite acceder a current_db_path
+                document_id = item_values[0]
+                print(f"Preparando para editar documento ID: {document_id}")  # Debug
 
-        except Exception as e:
-            messagebox.showerror("Error", f"No se pudo abrir para edición: {str(e)}")
-            print("Error completo:", traceback.format_exc())
+                # Pasar la referencia de la app principal al formulario
+                form = DocumentForm(self, mode="edit", document_id=document_id)
+                form.parent_app = self  # Esto permite acceder a current_db_path
+
+                # No es necesario llamar a load_document aquí, ya se llama en DocumentForm.__init__
+                # form.load_document()  
+
+            except Exception as e:
+                messagebox.showerror("Error", f"No se pudo abrir para edición: {str(e)}")
+                print("Error completo:", traceback.format_exc())
         
         
     def delete_document(self):
@@ -373,167 +414,175 @@ class App:
                 del self.analysis_windows[document_id]  # Limpiar si la ventana no existe
 
         # Crear una nueva ventana de análisis
-        analysis_window = AnalysisForm(self.root, document_id, current_db_path)
+        analysis_window = AnalysisForm(self.master, document_id, current_db_path)
         self.analysis_windows[document_id] = analysis_window.window  # Guardar referencia
 
 # Formulario para manejar creación y edición de documentos
 class DocumentForm:
     def __init__(self, parent, mode, document_id=None):
-        self.window = Toplevel(parent)
+        self.parent_app = parent  # Aquí guardamos la referencia a App
+
+        self.window = Toplevel(parent.master)  # Definir la ventana como un Toplevel
+
         self.window.title("Formulario Documento")
         self.mode = mode
         self.document_id = document_id
 
-        print(f"es el valor de document id {document_id}")
-        # Configurar grid principal
-        self.window.grid_columnconfigure(0, weight=1)
+        try:  # Capturar errores durante la inicialización
+            print(f"es el valor de document id {document_id}")
+            # Configurar grid principal
+            self.window.grid_columnconfigure(0, weight=1)
 
-        # Frame principal usando grid
-        main_frame = ttk.Frame(self.window, padding="20")
-        main_frame.grid(row=0, column=0, sticky="nsew")
-        main_frame.columnconfigure(1, weight=1)  # Hacer que la segunda columna se expanda
+            # Frame principal usando grid
+            main_frame = ttk.Frame(self.window, padding="20")
+            main_frame.grid(row=0, column=0, sticky="nsew")
+            main_frame.columnconfigure(1, weight=1)  # Hacer que la segunda columna se expanda
 
-        # Estilo general
-        padx_default = 10
-        pady_default = 5
-        entry_width = 50
+            # Estilo general
+            padx_default = 10
+            pady_default = 5
+            entry_width = 50
 
-        # Sección 1: Información básica
-        ttk.Label(main_frame, text="Información Básica", font=('Helvetica', 12, 'bold')).grid(
-            row=0, column=0, columnspan=2, pady=(0, 15), sticky="w")
+            # Sección 1: Información básica
+            ttk.Label(main_frame, text="Información Básica", font=('Helvetica', 12, 'bold')).grid(
+                row=0, column=0, columnspan=2, pady=(0, 15), sticky="w")
 
-        # CiteKey
-        ttk.Label(main_frame, text="CiteKey:").grid(row=1, column=0, sticky="e", padx=padx_default, pady=pady_default)
-        self.cite_key_entry = ttk.Entry(main_frame, width=entry_width)
-        self.cite_key_entry.grid(row=1, column=1, sticky="ew", pady=pady_default)
+            # CiteKey
+            ttk.Label(main_frame, text="CiteKey:").grid(row=1, column=0, sticky="e", padx=padx_default, pady=pady_default)
+            self.cite_key_entry = ttk.Entry(main_frame, width=entry_width)
+            self.cite_key_entry.grid(row=1, column=1, sticky="ew", pady=pady_default)
 
-        # Título
-        ttk.Label(main_frame, text="Título:").grid(row=2, column=0, sticky="e", padx=padx_default, pady=pady_default)
-        self.title_entry = ttk.Entry(main_frame, width=entry_width)
-        self.title_entry.grid(row=2, column=1, sticky="ew", pady=pady_default)
+            # Título
+            ttk.Label(main_frame, text="Título:").grid(row=2, column=0, sticky="e", padx=padx_default, pady=pady_default)
+            self.title_entry = ttk.Entry(main_frame, width=entry_width)
+            self.title_entry.grid(row=2, column=1, sticky="ew", pady=pady_default)
 
-        # Autor
-        ttk.Label(main_frame, text="Autor:").grid(row=3, column=0, sticky="e", padx=padx_default, pady=pady_default)
-        self.author_entry = ttk.Entry(main_frame, width=entry_width)
-        self.author_entry.grid(row=3, column=1, sticky="ew", pady=pady_default)
+            # Autor
+            ttk.Label(main_frame, text="Autor:").grid(row=3, column=0, sticky="e", padx=padx_default, pady=pady_default)
+            self.author_entry = ttk.Entry(main_frame, width=entry_width)
+            self.author_entry.grid(row=3, column=1, sticky="ew", pady=pady_default)
 
-        # Año
-        ttk.Label(main_frame, text="Año:").grid(row=4, column=0, sticky="e", padx=padx_default, pady=pady_default)
-        self.year_entry = ttk.Entry(main_frame, width=entry_width)
-        self.year_entry.grid(row=4, column=1, sticky="ew", pady=pady_default)
+            # Año
+            ttk.Label(main_frame, text="Año:").grid(row=4, column=0, sticky="e", padx=padx_default, pady=pady_default)
+            self.year_entry = ttk.Entry(main_frame, width=entry_width)
+            self.year_entry.grid(row=4, column=1, sticky="ew", pady=pady_default)
 
-        # Sección 2: Resumen
-        ttk.Label(main_frame, text="Resumen", font=('Helvetica', 12, 'bold')).grid(
-            row=5, column=0, columnspan=2, pady=(15, 5), sticky="w")
+            # Sección 2: Resumen
+            ttk.Label(main_frame, text="Resumen", font=('Helvetica', 12, 'bold')).grid(
+                row=5, column=0, columnspan=2, pady=(15, 5), sticky="w")
 
-        self.abstract_text = Text(main_frame, wrap=tk.WORD, height=10, width=60, 
-                                font=('Arial', 10), padx=5, pady=5)
-        scrollbar = ttk.Scrollbar(main_frame, orient="vertical", command=self.abstract_text.yview)
-        self.abstract_text.configure(yscrollcommand=scrollbar.set)
+            self.abstract_text = Text(main_frame, wrap=tk.WORD, height=10, width=60, 
+                                    font=('Arial', 10), padx=5, pady=5)
+            scrollbar = ttk.Scrollbar(main_frame, orient="vertical", command=self.abstract_text.yview)
+            self.abstract_text.configure(yscrollcommand=scrollbar.set)
 
-        self.abstract_text.grid(row=6, column=0, columnspan=2, sticky="nsew", padx=padx_default)
-        scrollbar.grid(row=6, column=2, sticky="ns")
+            self.abstract_text.grid(row=6, column=0, columnspan=2, sticky="nsew", padx=padx_default)
+            scrollbar.grid(row=6, column=2, sticky="ns")
 
-        # Sección 3: Metadatos adicionales
-        ttk.Label(main_frame, text="Metadatos Adicionales", font=('Helvetica', 12, 'bold')).grid(
-            row=7, column=0, columnspan=2, pady=(15, 5), sticky="w")
+            # Sección 3: Metadatos adicionales
+            ttk.Label(main_frame, text="Metadatos Adicionales", font=('Helvetica', 12, 'bold')).grid(
+                row=7, column=0, columnspan=2, pady=(15, 5), sticky="w")
 
-        # Etiquetas
-        ttk.Label(main_frame, text="Etiquetas:").grid(row=8, column=0, sticky="e", padx=padx_default, pady=pady_default)
-        self.scolr_tags_entry = ttk.Entry(main_frame, width=entry_width)
-        self.scolr_tags_entry.grid(row=8, column=1, sticky="ew", pady=pady_default)
+            # Etiquetas
+            ttk.Label(main_frame, text="Etiquetas:").grid(row=8, column=0, sticky="e", padx=padx_default, pady=pady_default)
+            self.scolr_tags_entry = ttk.Entry(main_frame, width=entry_width)
+            self.scolr_tags_entry.grid(row=8, column=1, sticky="ew", pady=pady_default)
 
-        # Etiqueta (Combobox)
-        # Inicializar archivos CSV al inicio del programa
-        list_manager.inicializar_archivos_csv()
-        ttk.Label(main_frame, text="Etiqueta:").grid(row=9, column=0, sticky="e", padx=padx_default, pady=pady_default)
-        self.combobox_etiquetas = ttk.Combobox(main_frame, width=entry_width-3)  # Ajustar ancho
-        self.combobox_etiquetas.grid(row=9, column=1, sticky="ew", pady=pady_default)
+            # Etiqueta (Combobox)
+            # Inicializar archivos CSV al inicio del programa
+            list_manager.inicializar_archivos_csv()
+            ttk.Label(main_frame, text="Etiqueta:").grid(row=9, column=0, sticky="e", padx=padx_default, pady=pady_default)
+            self.combobox_etiquetas = ttk.Combobox(main_frame, width=entry_width-3)  # Ajustar ancho
+            self.combobox_etiquetas.grid(row=9, column=1, sticky="ew", pady=pady_default)
 
-        # Botón para editar lista de etiquetas
-        ttk.Button(main_frame, text="Editar lista de etiquetas", 
-                  command=lambda: list_manager.editar_lista_csv('etiquetas.csv', 'Etiquetas')).grid(
-                      row=10, column=0, columnspan=2, pady=pady_default)
+            # Botón para editar lista de etiquetas
+            ttk.Button(main_frame, text="Editar lista de etiquetas", 
+                      command=lambda: list_manager.editar_lista_csv('etiquetas.csv', 'Etiquetas')).grid(
+                          row=10, column=0, columnspan=2, pady=pady_default)
 
-        # Cumplimiento de Criterios
-        ttk.Label(main_frame, text="Cumplimiento:").grid(row=11, column=0, sticky="e", padx=padx_default, pady=pady_default)
-        self.cumplimiento_entry = ttk.Entry(main_frame, width=entry_width)
-        self.cumplimiento_entry.grid(row=11, column=1, sticky="ew", pady=pady_default)
+            # Cumplimiento de Criterios
+            ttk.Label(main_frame, text="Cumplimiento:").grid(row=11, column=0, sticky="e", padx=padx_default, pady=pady_default)
+            self.cumplimiento_entry = ttk.Entry(main_frame, width=entry_width)
+            self.cumplimiento_entry.grid(row=11, column=1, sticky="ew", pady=pady_default)
 
-        # Referencia APA
-        ttk.Label(main_frame, text="Referencia APA:").grid(row=12, column=0, sticky="e", padx=padx_default, pady=pady_default)
-        self.referencia_apa_entry = ttk.Entry(main_frame, width=entry_width)
-        self.referencia_apa_entry.grid(row=12, column=1, sticky="ew", pady=pady_default)
+            # Referencia APA
+            ttk.Label(main_frame, text="Referencia APA:").grid(row=12, column=0, sticky="e", padx=padx_default, pady=pady_default)
+            self.referencia_apa_entry = ttk.Entry(main_frame, width=entry_width)
+            self.referencia_apa_entry.grid(row=12, column=1, sticky="ew", pady=pady_default)
 
-        # Botón Guardar
-        button_frame = ttk.Frame(main_frame)
-        button_frame.grid(row=13, column=0, columnspan=2, pady=(20, 0))
+            # Botón Guardar
+            button_frame = ttk.Frame(main_frame)
+            button_frame.grid(row=13, column=0, columnspan=2, pady=(20, 0))
 
-        ttk.Button(button_frame, text="Guardar", command=self.save_document).pack(pady=10, ipadx=20)
+            ttk.Button(button_frame, text="Guardar", command=self.save_document).pack(pady=10, ipadx=20)
 
-        # Configuración de grid para expansión
-        main_frame.rowconfigure(6, weight=1)  # Hacer que la fila del resumen se expanda
+            # Configuración de grid para expansión
+            main_frame.rowconfigure(6, weight=1)  # Hacer que la fila del resumen se expanda
 
-        if self.mode == "edit":
-            self.load_document()
+            if self.mode == "edit":
+                self.load_document()
 
-        # Cargar combobox después de inicializar
-        list_manager.actualizar_combobox(self.combobox_etiquetas, 'etiquetas.csv')
-
-    def load_document(self):
-        if not self.document_id:
-            print("Error: No hay document_id definido")
-            return
-
-        try:
-            # Usar connect_to_db en lugar de sqlite3.connect directamente
-            conn = connect_to_db(current_db_path)
-            cursor = conn.cursor()
-
-            print(f"Consultando documento con ID: {self.document_id}")
-
-            cursor.execute("""
-                SELECT cite_key, title, author, year, abstract, 
-                       scolr_tags, etiqueta, cumplimiento_de_criterios, referencia_apa 
-                FROM documentos 
-                WHERE Cid = ?
-            """, (self.document_id,))
-
-            document = cursor.fetchone()
-            conn.close()
-
-            if not document:
-                print("Error: No se encontró el documento con ID:", self.document_id)
-                return
-
-            print("Datos recuperados:", document)
-
-            # Limpiar campos primero
-            self.cite_key_entry.delete(0, tk.END)
-            self.title_entry.delete(0, tk.END)
-            self.author_entry.delete(0, tk.END)
-            self.year_entry.delete(0, tk.END)
-            self.abstract_text.delete("1.0", tk.END)
-            self.scolr_tags_entry.delete(0, tk.END)
-            self.combobox_etiquetas.set('')
-            self.cumplimiento_entry.delete(0, tk.END)
-            self.referencia_apa_entry.delete(0, tk.END)
-
-            # Llenar campos (convertir None a string vacío)
-            self.cite_key_entry.insert(0, document[0] or "")
-            self.title_entry.insert(0, document[1] or "")
-            self.author_entry.insert(0, document[2] or "")
-            self.year_entry.insert(0, str(document[3]) if document[3] is not None else "")
-            self.abstract_text.insert("1.0", document[4] or "")
-            self.scolr_tags_entry.insert(0, document[5] or "")
-            self.combobox_etiquetas.set(document[6] or "")
-            self.cumplimiento_entry.insert(0, document[7] or "")
-            self.referencia_apa_entry.insert(0, document[8] or "")
+            # Cargar combobox después de inicializar
+            list_manager.actualizar_combobox(self.combobox_etiquetas, 'etiquetas.csv')
 
         except Exception as e:
-            print(f"Error al cargar documento: {str(e)}")
-            messagebox.showerror("Error", f"No se pudo cargar el documento: {str(e)}")
+            messagebox.showerror("Error", f"Error en la inicialización de DocumentForm: {str(e)}")
+            print(f"Error en DocumentForm.__init__: {str(e)}")
+            raise  # Re-lanzar el error para que se maneje en update_document       
+        
+    def load_document(self):
+            if not self.document_id:
+                print("Error: No hay document_id definido")
+                return
 
+            try:
+                # Usar connect_to_db en lugar de sqlite3.connect directamente
+                conn = connect_to_db(self.parent_app.current_db_path)  # Usar la conexión de la App
+                cursor = conn.cursor()
+
+                print(f"Consultando documento con ID: {self.document_id}")
+
+                cursor.execute("""
+                    SELECT cite_key, title, author, year, abstract, 
+                           scolr_tags, etiqueta, cumplimiento_de_criterios, referencia_apa 
+                    FROM documentos 
+                    WHERE Cid = ?
+                """, (self.document_id,))
+
+                document = cursor.fetchone()
+                conn.close()  # Cerrar la conexión aquí
+
+                if not document:
+                    print("Error: No se encontró el documento con ID:", self.document_id)
+                    return
+
+                print("Datos recuperados:", document)
+
+                # Limpiar campos primero
+                self.cite_key_entry.delete(0, tk.END)
+                self.title_entry.delete(0, tk.END)
+                self.author_entry.delete(0, tk.END)
+                self.year_entry.delete(0, tk.END)
+                self.abstract_text.delete("1.0", tk.END)
+                self.scolr_tags_entry.delete(0, tk.END)
+                self.combobox_etiquetas.set('')
+                self.cumplimiento_entry.delete(0, tk.END)
+                self.referencia_apa_entry.delete(0, tk.END)
+
+                # Llenar campos (convertir None a string vacío)
+                self.cite_key_entry.insert(0, document[0] or "")
+                self.title_entry.insert(0, document[1] or "")
+                self.author_entry.insert(0, document[2] or "")
+                self.year_entry.insert(0, str(document[3]) if document[3] is not None else "")
+                self.abstract_text.insert("1.0", document[4] or "")
+                self.scolr_tags_entry.insert(0, document[5] or "")
+                self.combobox_etiquetas.set(document[6] or "")
+                self.cumplimiento_entry.insert(0, document[7] or "")
+                self.referencia_apa_entry.insert(0, document[8] or "")
+
+            except Exception as e:
+                print(f"Error al cargar documento: {str(e)}")
+                messagebox.showerror("Error", f"No se pudo cargar el documento: {str(e)}")
         
             
     def save_document(self):
@@ -596,12 +645,10 @@ class DocumentForm:
                 conn.close()
                 
                 
-# Ejecutar la aplicación
-# Modifica la creación de la aplicación principal para exponer la instancia
+
+
 if __name__ == "__main__":
-    current_db_path = "default_project.db"
-    init_db(current_db_path)
-    root = tk.Tk()
-    app = App(root)
+    root = tk.Tk()  # Crear la ventana principal
+    app = App(root)  # Instanciar la clase App
     root._app_instance = app  # Hacer accesible la instancia de App
-    root.mainloop()
+    root.mainloop()  # Iniciar el bucle de eventos de la aplicación
