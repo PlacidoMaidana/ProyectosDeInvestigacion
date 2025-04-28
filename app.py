@@ -7,8 +7,9 @@ from proyecto import ProyectoManager  # Importar el gestor de proyectos
 from bib_importer import BibImporter
 import sqlite3 
 from importar_enlaces import importar_enlaces
-
-
+import webbrowser
+import os
+from importar_texto import ImportarTextoVentana
 
 
 # Crear una instancia global (o puedes pasarla como parámetro)
@@ -60,12 +61,21 @@ class App:
             command=self.import_links_from_excel,  # Método que implementamos para importar enlaces desde Excel
             state=tk.NORMAL  # Activado de forma predeterminada, puedes cambiarlo si lo necesitas
         )
+        # IMPORTAR CAPTURA DE TABS, BASICAMENTE CAPTURA E IMPORTA TEXTO ESTO SERA MUY UTIL PARA IMPORTAR ANALISIS IA
+        self.import_menu.add_command(
+        label="Importar Texto desde Archivo o Entrada",  # Título del menú
+        command=self.import_text_to_database,  # Llama al método intermedio
+        state=tk.NORMAL  # Activado de forma predeterminada
+        )
+        
         
         self.menu_bar.add_cascade(label="Importaciones", menu=self.import_menu)
 
         # Configurar Treeview
+        tree_frame = ttk.Frame(self.master)
+        tree_frame.pack(fill="both", expand=True)
         self.tree = ttk.Treeview(
-            self.master,
+            tree_frame,
             columns=("Cid", "CiteKey", "Title", "Author", "Year", "Etiqueta", "Cumplimiento", "ReferenciaAPA","Enlace", "Actions"),
             show="headings"
         )
@@ -92,6 +102,17 @@ class App:
         self.tree.column("Actions", width=120, anchor="center")
 
         self.tree.bind("<Button-1>", self.on_tree_click)
+        
+
+
+        # Crear la barra de desplazamiento vertical
+        scrollbar = Scrollbar(tree_frame, orient="vertical", command=self.tree.yview)
+        scrollbar.pack(side="right", fill="y")
+
+        # Vincular la barra de desplazamiento al Treeview
+        self.tree.configure(yscrollcommand=scrollbar.set)
+
+        # Empaquetar el Treeview
         self.tree.pack(fill=tk.BOTH, expand=True)
 
         # Botones CRUD
@@ -100,6 +121,7 @@ class App:
         Button(self.crud_frame, text="Crear Documento", command=self.create_document).pack(side=tk.LEFT, padx=5)
         Button(self.crud_frame, text="Modificar Documento", command=self.update_document).pack(side=tk.LEFT, padx=5)
         Button(self.crud_frame, text="Eliminar Documento", command=self.delete_document).pack(side=tk.LEFT, padx=5)
+        Button(self.crud_frame, text="Refrescar", command=self.refresh_ui).pack(side=tk.LEFT, padx=5)
 
         # Conectar a la base de datos por defecto
         self.switch_database(self.current_db_path)
@@ -117,31 +139,37 @@ class App:
 
         self.current_db_path = new_db_path  # Actualizar ruta actual
         self.refresh_ui()  # Refrescar la interfaz (cargar datos en Treeview)
+
+
         
     def refresh_ui(self):
         try:
             # Limpiar los elementos existentes en el Treeview
             for item in self.tree.get_children():
                 self.tree.delete(item)
-    
+
             # Obtener todos los registros de la base de datos activa
             cursor = self.db_connection.conn.cursor()
             query = "SELECT Cid, cite_key, title, author, year, etiqueta, cumplimiento_de_criterios, referencia_apa, enlace FROM documentos"
             cursor.execute(query)
             rows = cursor.fetchall()
-    
-            # Insertar cada registro en el Treeview
-            #for row in rows:
-            #    self.tree.insert("", "end", values=row)
-                
-            for row in rows:
-                self.tree.insert("", "end", values=(*row, "📝 Analizar"))  # Icono añadido aquí    
-    
+
+            # Insertar cada registro en el Treeview con colores alternados
+            for i, row in enumerate(rows):
+                # Determinar etiqueta de color para filas alternadas
+                tag = "odd_row" if i % 2 == 0 else "even_row"
+
+                # Insertar en el Treeview con etiqueta
+                self.tree.insert("", "end", values=(*row, "📝 Analizar"), tags=(tag,))
+
+            # Configurar los estilos para las filas
+            self.tree.tag_configure("odd_row", background="#F0F0F0")  # Color para filas pares
+            self.tree.tag_configure("even_row", background="#FFFFFF")  # Color para filas impares
+
             print("Interfaz actualizada con los datos de la base de datos activa.")  # Debug
-    
+
         except sqlite3.Error as e:
-            messagebox.showerror("Error", f"No se pudo cargar la interfaz: {str(e)}")
-        
+            messagebox.showerror("Error", f"No se pudo cargar la interfaz: {str(e)}")       
         
     def create_new_database(self):
         db_path = filedialog.asksaveasfilename(
@@ -163,15 +191,47 @@ class App:
  
     
     # Añade este nuevo método para manejar clics en el Treeview
+  
+
     def on_tree_click(self, event):
+        # Identificar la región y la columna
         region = self.tree.identify("region", event.x, event.y)
         column = self.tree.identify_column(event.x)
 
-        if region == "cell" and column == "#10":  # Asegúrate que sea la columna correcta (Actions)
-            self.on_action_click(event)
-            
-    # Configurar clic en la columna de "Acciones"
+        if region == "cell":
+            if column == "#9":  # Columna de enlaces
+                self.on_link_click(event)
+            elif column == "#10":  # Columna de acciones
+                self.on_action_click(event)
+
+    def on_link_click(self, event):
+        # Obtener el registro seleccionado
+        selected_item = self.tree.selection()
+        if not selected_item:
+            messagebox.showwarning("Advertencia", "Por favor selecciona un documento.")
+            return
+
+        try:
+            # Obtener el enlace desde la columna correspondiente
+            item_values = self.tree.item(selected_item[0])["values"]
+            enlace = item_values[8]  # Índice 8: Columna 'Enlace'
+
+            if not enlace:
+                messagebox.showerror("Error", "No se encontró un enlace válido.")
+                return
+
+            # Verificar si el enlace es una URL o un path local
+            if enlace.startswith("http://") or enlace.startswith("https://"):
+                webbrowser.open(enlace)  # Abrir el enlace en el navegador
+            elif os.path.exists(enlace):
+                os.startfile(enlace)  # Abrir el archivo con el editor asociado
+            else:
+                messagebox.showerror("Error", "El enlace o archivo no es válido o no se puede abrir.")
+        except Exception as e:
+            messagebox.showerror("Error", f"No se pudo abrir el enlace: {str(e)}")
+
     def on_action_click(self, event):
+        # Obtener el registro seleccionado
         selected_item = self.tree.selection()
         if not selected_item:
             messagebox.showwarning("Advertencia", "Por favor selecciona un documento.")
@@ -212,33 +272,7 @@ class App:
         for row in rows:
             self.tree.insert("", "end", values=(*row, "📝 Analizar"))  # Icono añadido aquí
                 
-    # Configurar clic en la columna de "Acciones"
-    def on_action_click(self, event):
-        selected_item = self.tree.selection()
-        if not selected_item:
-            messagebox.showwarning("Advertencia", "Por favor selecciona un documento.")
-            return
-
-        document_id = self.tree.item(selected_item[0])["values"][0]
-
-        # Verificar si la ventana ya está abierta
-        if document_id in self.analysis_windows:
-            existing_window = self.analysis_windows[document_id]
-            if existing_window.winfo_exists():
-                existing_window.lift()  # Llevar la ventana al frente
-                return
-            else:
-                del self.analysis_windows[document_id]  # Remover referencia si no existe
-
-        # Abrir una nueva ventana de análisis
-        analysis_window = AnalysisForm(self.master, document_id,self.current_db_path)
-        self.analysis_windows[document_id] = analysis_window.window
-
-        # Vincular clic en la columna "Acciones"
-        self.tree.bind("<Button-1>", self.on_action_click)
-
-
-
+    
     def open_database(self):
         db_path = filedialog.askopenfilename(filetypes=[("SQLite Database", "*.db")])
         if db_path:
@@ -380,7 +414,19 @@ class App:
             print("Consulta fallida:", safe_query)
             print("Error completo:", str(e))
 
-        
+    def import_text_to_database(self):
+        if not self.current_db_path:
+            messagebox.showerror("Error", "Primero abra una base de datos.")
+            return
+        try:
+            # Crear una ventana modal para importar texto
+            from importar_texto import ImportarTextoVentana
+            ImportarTextoVentana(self.master, self.current_db_path)  # Pasar la ventana principal y el path de la base
+            self.refresh_documents_list()
+        except Exception as e:
+            messagebox.showerror("Error", f"Fallo al abrir ventana de importación: {str(e)}")
+    
+      
     def create_document(self):
         # Abrir el formulario para crear un documento
         DocumentForm(self.master, mode="create")
@@ -673,7 +719,7 @@ class DocumentForm:
                 self.combobox_etiquetas.set(document[6] or "")
                 self.cumplimiento_entry.insert(0, document[7] or "")
                 self.referencia_apa_entry.insert(0, document[8] or "")
-                self.enlace_entry.insert(0, document[8] or "")
+                self.enlace_entry.insert(0, document[9] or "")
 
             except Exception as e:
                 print(f"Error al cargar documento: {str(e)}")
@@ -706,15 +752,15 @@ class DocumentForm:
             if self.mode == "create":
                 cursor.execute("""
                     INSERT INTO documentos (cite_key, title, author, year, abstract, 
-                                        scolr_tags, etiqueta, cumplimiento_de_criterios, referencia_apa)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                        scolr_tags, etiqueta, cumplimiento_de_criterios, referencia_apa, enlace)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?,?)
                 """, (cite_key, title, author, year, abstract, scolr_tags, etiqueta, cumplimiento, referencia_apa, enlace))
                 messagebox.showinfo("Éxito", "Documento creado exitosamente.")
             elif self.mode == "edit":
                 cursor.execute("""
                     UPDATE documentos
                     SET cite_key = ?, title = ?, author = ?, year = ?, abstract = ?, 
-                        scolr_tags = ?, etiqueta = ?, cumplimiento_de_criterios = ?, referencia_apa = ?
+                        scolr_tags = ?, etiqueta = ?, cumplimiento_de_criterios = ?, referencia_apa = ?, enlace = ?
                     WHERE Cid = ?
                 """, (cite_key, title, author, year, abstract, scolr_tags, etiqueta, cumplimiento, referencia_apa, enlace, self.document_id))
                 messagebox.showinfo("Éxito", "Documento actualizado exitosamente.")
@@ -724,7 +770,8 @@ class DocumentForm:
             # Actualizar la lista de documentos en la ventana principal
             app_instance = self.window.master._app_instance
             if app_instance:
-                app_instance.load_documents()
+                #app_instance.load_documents()
+                self.refresh_ui()
 
             self.window.destroy()
 
