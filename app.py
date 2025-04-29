@@ -79,17 +79,25 @@ class App:
         self.menu_bar.add_cascade(label="Importaciones", menu=self.import_menu)
         
         
-        # Crear el Combobox para seleccionar etiquetas (el filtro)
-        self.filter_combobox = ttk.Combobox(self.master, state="readonly")
-        self.filter_combobox['values'] = ["Todos", "INCLUIDO", "EXCLUIDO", "INTERESANTE"]
-        self.filter_combobox.current(0)  # Por defecto, mostrar "Todos"
-        self.filter_combobox.pack(pady=10)
+        # Crear una instancia de ListManager
+        self.list_manager = ListManager()
 
-        # Conectar el evento de cambio de selección
+        # Crear un frame para colocar el ComboBox y el botón de edición juntos
+        combo_frame = ttk.Frame(self.master)
+        combo_frame.pack(pady=10, fill=tk.X)  # Ajusta la posición y expande en la dirección horizontal
+
+        # ComboBox para seleccionar etiquetas
+        self.filter_combobox = ttk.Combobox(combo_frame, state="readonly")
+        self.list_manager.actualizar_combobox(self.filter_combobox, "etiquetas.csv", valor_predeterminado="Todos")
+        self.filter_combobox.pack(side=tk.LEFT, padx=5)  # Coloca el ComboBox a la izquierda con margen horizontal
         self.filter_combobox.bind("<<ComboboxSelected>>", self.filtrar_por_etiqueta)
-
-
         
+        # Botón para editar etiquetas
+        ttk.Button(
+            combo_frame,
+            text="Editar etiquetas",
+            command=lambda: self.list_manager.editar_lista_csv("etiquetas.csv", "Etiquetas")
+        ).pack(side=tk.LEFT, padx=5)  # Coloca el botón a la derecha del ComboBox con margen horizontal
         
         
         
@@ -160,12 +168,12 @@ class App:
         Filtra los registros en el Treeview según la etiqueta seleccionada.
         """
         etiqueta_seleccionada = self.filter_combobox.get()
-    
+
         # Conectar a la base de datos
         try:
             conn = sqlite3.connect(self.current_db_path)
             cursor = conn.cursor()
-    
+
             # Construir la consulta SQL
             if etiqueta_seleccionada == "Todos":
                 query = "SELECT Cid, cite_key, title, author, year, etiqueta, cumplimiento_de_criterios FROM documentos"
@@ -177,18 +185,18 @@ class App:
                     WHERE etiqueta = ?
                 """
                 cursor.execute(query, (etiqueta_seleccionada,))
-    
+
             # Obtener los resultados
             registros = cursor.fetchall()
-    
+
             # Limpiar el Treeview antes de cargar los nuevos datos
             for item in self.tree.get_children():
                 self.tree.delete(item)
-    
+
             # Insertar los registros filtrados en el Treeview
             for registro in registros:
                 self.tree.insert("", "end", values=registro)
-    
+
         except sqlite3.Error as e:
             messagebox.showerror("Error", f"Error al filtrar los registros: {e}")
         finally:
