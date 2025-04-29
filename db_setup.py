@@ -35,6 +35,7 @@ def init_db(db_path):
         documento_id INTEGER,
         dimension TEXT,
         descripcion TEXT,
+        archivo TEXT,
         FOREIGN KEY (documento_id) REFERENCES documentos(Cid)
     )
     """)
@@ -44,7 +45,8 @@ def init_db(db_path):
     CREATE TABLE IF NOT EXISTS proyecto (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         nombre TEXT,
-        descripcion TEXT
+        descripcion TEXT,
+        archivo TEXT
     )
     """)
     

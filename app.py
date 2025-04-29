@@ -673,242 +673,423 @@ class App:
 
 
 
-# Formulario para manejar creación y edición de documentos
+import os
+import subprocess
+import tkinter as tk
+from tkinter import Button  # No ttk para dar color a los botones
+from tkinter import ttk, filedialog, messagebox
+from tkinter.font import Font
+
 class DocumentForm:
     def __init__(self, parent, mode, document_id=None):
+       
         self.parent_app = parent  # Aquí guardamos la referencia a App
-
-        self.window = Toplevel(parent.master)  # Definir la ventana como un Toplevel
-
-        self.window.title("Formulario Documento")
         self.mode = mode
         self.document_id = document_id
+        print(f"Usando la base de datos: {self.parent_app.current_db_path}")
 
-        try:  # Capturar errores durante la inicialización
-            print(f"es el valor de document id {document_id}")
-            # Configurar grid principal
-            self.window.grid_columnconfigure(0, weight=1)
-
-            # Frame principal usando grid
-            main_frame = ttk.Frame(self.window, padding="20")
-            main_frame.grid(row=0, column=0, sticky="nsew")
-            main_frame.columnconfigure(1, weight=1)  # Hacer que la segunda columna se expanda
-
-            # Estilo general
-            padx_default = 10
-            pady_default = 5
-            entry_width = 50
-
-            # Sección 1: Información básica
-            ttk.Label(main_frame, text="Información Básica", font=('Helvetica', 12, 'bold')).grid(
-                row=0, column=0, columnspan=2, pady=(0, 15), sticky="w")
-
-            # CiteKey
-            ttk.Label(main_frame, text="CiteKey:").grid(row=1, column=0, sticky="e", padx=padx_default, pady=pady_default)
-            self.cite_key_entry = ttk.Entry(main_frame, width=entry_width)
-            self.cite_key_entry.grid(row=1, column=1, sticky="ew", pady=pady_default)
-
-            # Título
-            ttk.Label(main_frame, text="Título:").grid(row=2, column=0, sticky="e", padx=padx_default, pady=pady_default)
-            self.title_entry = ttk.Entry(main_frame, width=entry_width)
-            self.title_entry.grid(row=2, column=1, sticky="ew", pady=pady_default)
-
-            # Autor
-            ttk.Label(main_frame, text="Autor:").grid(row=3, column=0, sticky="e", padx=padx_default, pady=pady_default)
-            self.author_entry = ttk.Entry(main_frame, width=entry_width)
-            self.author_entry.grid(row=3, column=1, sticky="ew", pady=pady_default)
-
-            # Año
-            ttk.Label(main_frame, text="Año:").grid(row=4, column=0, sticky="e", padx=padx_default, pady=pady_default)
-            self.year_entry = ttk.Entry(main_frame, width=entry_width)
-            self.year_entry.grid(row=4, column=1, sticky="ew", pady=pady_default)
-
-            # Sección 2: Resumen
-            ttk.Label(main_frame, text="Resumen", font=('Helvetica', 12, 'bold')).grid(
-                row=5, column=0, columnspan=2, pady=(15, 5), sticky="w")
-
-            self.abstract_text = Text(main_frame, wrap=tk.WORD, height=10, width=60, 
-                                    font=('Arial', 10), padx=5, pady=5)
-            scrollbar = ttk.Scrollbar(main_frame, orient="vertical", command=self.abstract_text.yview)
-            self.abstract_text.configure(yscrollcommand=scrollbar.set)
-
-            self.abstract_text.grid(row=6, column=0, columnspan=2, sticky="nsew", padx=padx_default)
-            scrollbar.grid(row=6, column=2, sticky="ns")
-
-            # Sección 3: Metadatos adicionales
-            ttk.Label(main_frame, text="Metadatos Adicionales", font=('Helvetica', 12, 'bold')).grid(
-                row=7, column=0, columnspan=2, pady=(15, 5), sticky="w")
-
-            # Etiquetas
-            ttk.Label(main_frame, text="Etiquetas:").grid(row=8, column=0, sticky="e", padx=padx_default, pady=pady_default)
-            self.scolr_tags_entry = ttk.Entry(main_frame, width=entry_width)
-            self.scolr_tags_entry.grid(row=8, column=1, sticky="ew", pady=pady_default)
-
-            # Etiqueta (Combobox)
-            # Inicializar archivos CSV al inicio del programa
-            list_manager.inicializar_archivos_csv()
-            ttk.Label(main_frame, text="Etiqueta:").grid(row=9, column=0, sticky="e", padx=padx_default, pady=pady_default)
-            self.combobox_etiquetas = ttk.Combobox(main_frame, width=entry_width-3)  # Ajustar ancho
-            self.combobox_etiquetas.grid(row=9, column=1, sticky="ew", pady=pady_default)
-
-            # Botón para editar lista de etiquetas
-            ttk.Button(main_frame, text="Editar lista de etiquetas", 
-                      command=lambda: list_manager.editar_lista_csv('etiquetas.csv', 'Etiquetas')).grid(
-                          row=10, column=0, columnspan=2, pady=pady_default)
-
-            # Cumplimiento de Criterios
-            ttk.Label(main_frame, text="Cumplimiento:").grid(row=11, column=0, sticky="e", padx=padx_default, pady=pady_default)
-            self.cumplimiento_entry = ttk.Entry(main_frame, width=entry_width)
-            self.cumplimiento_entry.grid(row=11, column=1, sticky="ew", pady=pady_default)
-
-            # Referencia APA
-            ttk.Label(main_frame, text="Referencia APA:").grid(row=12, column=0, sticky="e", padx=padx_default, pady=pady_default)
-            self.referencia_apa_entry = ttk.Entry(main_frame, width=entry_width)
-            self.referencia_apa_entry.grid(row=12, column=1, sticky="ew", pady=pady_default)
-         
-            # Referencia APA
-            ttk.Label(main_frame, text="Enlace:").grid(row=13, column=0, sticky="e", padx=padx_default, pady=pady_default)
-            self.enlace_entry = ttk.Entry(main_frame, width=entry_width)
-            self.enlace_entry.grid(row=13, column=1, sticky="ew", pady=pady_default)
-
-            # Botón Guardar
-            button_frame = ttk.Frame(main_frame)
-            button_frame.grid(row=14, column=0, columnspan=2, pady=(20, 0))
-
-            ttk.Button(button_frame, text="Guardar", command=self.save_document).pack(pady=10, ipadx=20)
-
-            # Configuración de grid para expansión
-            main_frame.rowconfigure(6, weight=1)  # Hacer que la fila del resumen se expanda
-
-            if self.mode == "edit":
-                self.load_document()
-
-            # Cargar combobox después de inicializar
-            list_manager.actualizar_combobox(self.combobox_etiquetas, 'etiquetas.csv')
-
-        except Exception as e:
-            messagebox.showerror("Error", f"Error en la inicialización de DocumentForm: {str(e)}")
-            print(f"Error en DocumentForm.__init__: {str(e)}")
-            raise  # Re-lanzar el error para que se maneje en update_document       
+        # Configuración de la ventana
+        self.window = tk.Toplevel(parent.master)
+        self.window.title("?? Formulario de Documento")
+        self.window.geometry("800x700")
+        self.window.minsize(700, 600)
         
-    def load_document(self):
-            if not self.document_id:
-                print("Error: No hay document_id definido")
-                return
-
-            try:
-                # Usar connect_to_db en lugar de sqlite3.connect directamente
-                conn = connect_to_db(self.parent_app.current_db_path)  # Usar la conexión de la App
-                cursor = conn.cursor()
-
-                print(f"Consultando documento con ID: {self.document_id}")
-
-                cursor.execute("""
-                    SELECT cite_key, title, author, year, abstract, 
-                           scolr_tags, etiqueta, cumplimiento_de_criterios, referencia_apa, enlace 
-                    FROM documentos 
-                    WHERE Cid = ?
-                """, (self.document_id,))
-
-                document = cursor.fetchone()
-                conn.close()  # Cerrar la conexión aquí
-
-                if not document:
-                    print("Error: No se encontró el documento con ID:", self.document_id)
-                    return
-
-                print("Datos recuperados:", document)
-
-                # Limpiar campos primero
-                self.cite_key_entry.delete(0, tk.END)
-                self.title_entry.delete(0, tk.END)
-                self.author_entry.delete(0, tk.END)
-                self.year_entry.delete(0, tk.END)
-                self.abstract_text.delete("1.0", tk.END)
-                self.scolr_tags_entry.delete(0, tk.END)
-                self.combobox_etiquetas.set('')
-                self.cumplimiento_entry.delete(0, tk.END)
-                self.referencia_apa_entry.delete(0, tk.END)
-                self.enlace_entry.delete(0, tk.END)
-
-                # Llenar campos (convertir None a string vacío)
-                self.cite_key_entry.insert(0, document[0] or "")
-                self.title_entry.insert(0, document[1] or "")
-                self.author_entry.insert(0, document[2] or "")
-                self.year_entry.insert(0, str(document[3]) if document[3] is not None else "")
-                self.abstract_text.insert("1.0", document[4] or "")
-                self.scolr_tags_entry.insert(0, document[5] or "")
-                self.combobox_etiquetas.set(document[6] or "")
-                self.cumplimiento_entry.insert(0, document[7] or "")
-                self.referencia_apa_entry.insert(0, document[8] or "")
-                self.enlace_entry.insert(0, document[9] or "")
-
-            except Exception as e:
-                print(f"Error al cargar documento: {str(e)}")
-                messagebox.showerror("Error", f"No se pudo cargar el documento: {str(e)}")
+        # Estilos y temas
+        self.setup_styles()
         
+        # Iconos (puedes reemplazarlos con imágenes si lo prefieres)
+        self.icons = {
+            'save': '??',
+            'file': '??',
+            'open': '??',
+            'edit': '??',
+            'tags': '???'
+        }
+        
+        # Frame principal con scrollbar
+        self.setup_main_frame()
+        
+        # Secciones del formulario
+        self.setup_basic_info_section()
+        self.setup_abstract_section()
+        self.setup_metadata_section()
+        self.setup_action_buttons()
+        
+        # Cargar datos si estamos en modo edición
+        if self.mode == "edit":
+            self.load_document()
+        
+        # Configuración final de la ventana
+        self.window.protocol("WM_DELETE_WINDOW", self.on_close)
+
+    def setup_styles(self):
+        """Configura los estilos visuales"""
+        self.style = ttk.Style()
+        self.style.configure('TLabel', font=('Arial', 10))
+        self.style.configure('TButton', font=('Arial', 10), padding=5)
+        self.style.configure('Title.TLabel', font=('Arial', 12, 'bold'), foreground='#2c3e50')
+        self.style.configure('Section.TFrame', relief=tk.GROOVE, borderwidth=2, padding=10)
+        self.style.configure('Accent.TButton', foreground='white', background='#3498db', font=('Arial', 10, 'bold'))
+
+    def setup_main_frame(self):
+        """Configura el frame principal con scrollbar"""
+        # Canvas y scrollbar
+        self.canvas = tk.Canvas(self.window)
+        self.scrollbar = ttk.Scrollbar(self.window, orient=tk.VERTICAL, command=self.canvas.yview)
+        
+        # Frame desplazable
+        self.main_frame = ttk.Frame(self.canvas)
+        self.main_frame.bind(
+            "<Configure>",
+            lambda e: self.canvas.configure(
+                scrollregion=self.canvas.bbox("all")
+            )
+        )
+        
+        self.canvas.create_window((0, 0), window=self.main_frame, anchor="nw")
+        self.canvas.configure(yscrollcommand=self.scrollbar.set)
+        
+        self.canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        self.scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        
+        # Configurar expansión de columnas
+        self.main_frame.columnconfigure(1, weight=1)
+
+    def setup_basic_info_section(self):
+        """Configura la sección de información básica"""
+        section_frame = ttk.LabelFrame(
+            self.main_frame, 
+            text=" Información Básica ",
+            style='Section.TFrame'
+        )
+        section_frame.grid(row=0, column=0, columnspan=2, sticky="nsew", padx=10, pady=10)
+        
+        # Campos de información básica
+        fields = [
+            ("CiteKey:", "cite_key_entry", True),
+            ("Título:", "title_entry", True),
+            ("Autor:", "author_entry", True),
+            ("Año:", "year_entry", True)
+        ]
+        
+        for i, (label, field_name, required) in enumerate(fields):
+            ttk.Label(section_frame, text=label).grid(row=i, column=0, sticky="e", padx=5, pady=5)
+            entry = ttk.Entry(section_frame, width=50)
+            entry.grid(row=i, column=1, sticky="ew", padx=5, pady=5)
+            setattr(self, field_name, entry)
             
-    def save_document(self):
-        # Obtener todos los valores del formulario
-        cite_key = self.cite_key_entry.get()
-        title = self.title_entry.get()
-        author = self.author_entry.get()
-        year = self.year_entry.get()
-        abstract = self.abstract_text.get("1.0", tk.END).strip()
-        scolr_tags = self.scolr_tags_entry.get()
-        etiqueta = self.combobox_etiquetas.get()
-        cumplimiento = self.cumplimiento_entry.get()
-        referencia_apa = self.referencia_apa_entry.get()
-        enlace = self.enlace_entry.get()
+            if required:
+                ttk.Label(section_frame, text="*", foreground="red").grid(row=i, column=2, sticky="w")
 
-        # Validación básica de campos requeridos
-        if not all([cite_key, title, author, year]):
-            messagebox.showwarning("Advertencia", "Por favor complete los campos obligatorios: CiteKey, Título, Autor y Año")
+    def setup_abstract_section(self):
+        """Configura la sección de resumen/abstract"""
+        section_frame = ttk.LabelFrame(
+            self.main_frame, 
+            text=" Resumen ",
+            style='Section.TFrame'
+        )
+        section_frame.grid(row=1, column=0, columnspan=2, sticky="nsew", padx=10, pady=10)
+        
+        # Área de texto con scrollbar
+        text_frame = tk.Frame(section_frame)
+        text_frame.pack(fill=tk.BOTH, expand=True)
+        
+        scrollbar = ttk.Scrollbar(text_frame)
+        self.abstract_text = tk.Text(
+            text_frame, 
+            wrap=tk.WORD, 
+            height=10, 
+            font=('Arial', 10),
+            padx=5,
+            pady=5,
+            yscrollcommand=scrollbar.set
+        )
+        scrollbar.config(command=self.abstract_text.yview)
+        
+        self.abstract_text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+
+    def setup_metadata_section(self):
+        """Configura la sección de metadatos adicionales"""
+        section_frame = ttk.LabelFrame(
+            self.main_frame, 
+            text=" Metadatos Adicionales ",
+            style='Section.TFrame'
+        )
+        section_frame.grid(row=2, column=0, columnspan=2, sticky="nsew", padx=10, pady=10)
+
+        # Configurar grid para expansión
+        section_frame.columnconfigure(1, weight=1)
+
+        # Contador de filas para organización
+        current_row = 0
+
+        # 1. Campo de etiquetas libres
+        ttk.Label(section_frame, text="Etiquetas:").grid(
+            row=current_row, column=0, sticky="e", padx=5, pady=5)
+        self.scolr_tags_entry = ttk.Entry(section_frame)
+        self.scolr_tags_entry.grid(
+            row=current_row, column=1, sticky="ew", padx=5, pady=5)
+        current_row += 1
+
+        # 2. Combobox de etiquetas estructuradas
+        ttk.Label(section_frame, text="Etiqueta:").grid(
+            row=current_row, column=0, sticky="e", padx=5, pady=5)
+
+        # Primero crear el Combobox
+        self.combobox_etiquetas = ttk.Combobox(
+            section_frame, 
+            state="readonly"  # Hacerlo de solo lectura
+        )
+        self.combobox_etiquetas.grid(
+            row=current_row, column=1, sticky="ew", padx=5, pady=5)
+
+        # Luego inicializar y cargar las etiquetas
+        self.list_manager = ListManager()
+        self.list_manager.inicializar_archivos_csv()
+        self.list_manager.actualizar_combobox(
+            self.combobox_etiquetas, 
+            "etiquetas.csv", 
+            valor_predeterminado="Todos"
+        )
+        current_row += 1
+
+        # 3. Botón para editar etiquetas
+        edit_btn = ttk.Button(
+            section_frame,
+            text=f" {self.icons['edit']} Editar lista de etiquetas",
+            command=self.edit_tags_action
+        )
+        edit_btn.grid(
+            row=current_row, column=0, columnspan=2, pady=(5, 15))  # Más espacio abajo
+        current_row += 1
+
+        # 4. Campo de cumplimiento
+        ttk.Label(section_frame, text="Cumplimiento:").grid(
+            row=current_row, column=0, sticky="e", padx=5, pady=5)
+        self.cumplimiento_entry = ttk.Entry(section_frame)
+        self.cumplimiento_entry.grid(
+            row=current_row, column=1, sticky="ew", padx=5, pady=5)
+        current_row += 1
+
+        # 5. Campo de referencia APA
+        ttk.Label(section_frame, text="Referencia APA:").grid(
+            row=current_row, column=0, sticky="e", padx=5, pady=5)
+        self.referencia_apa_entry = ttk.Entry(section_frame)
+        self.referencia_apa_entry.grid(
+            row=current_row, column=1, sticky="ew", padx=5, pady=5)
+        current_row += 1
+
+        # 6. Selector de archivos
+        self.setup_file_link_section(section_frame, row=current_row)
+
+    def edit_tags_action(self):
+        """Maneja la edición de etiquetas y actualiza el combobox"""
+        try:
+            self.list_manager.editar_lista_csv('etiquetas.csv', 'Etiquetas')
+            # Actualizar el combobox después de editar
+            self.list_manager.actualizar_combobox(
+                self.combobox_etiquetas,
+                "etiquetas.csv",
+                valor_predeterminado="Todos"
+            )
+        except Exception as e:
+            messagebox.showerror("Error", f"No se pudo actualizar las etiquetas: {str(e)}")
+        
+        
+    def setup_file_link_section(self, parent, row):
+        """Configura el campo de enlace con selector de archivo"""
+        ttk.Label(parent, text="Enlace:").grid(row=row, column=0, sticky="e", padx=5, pady=5)
+        
+        link_frame = ttk.Frame(parent)
+        link_frame.grid(row=row, column=1, sticky="ew", padx=5, pady=5)
+        
+        self.enlace_entry = ttk.Entry(link_frame)
+        self.enlace_entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 5))
+        
+        ttk.Button(
+            link_frame,
+            text=f" {self.icons['file']} Seleccionar",
+            command=self.select_file
+        ).pack(side=tk.LEFT, padx=2)
+        
+        self.open_link_btn = ttk.Button(
+            link_frame,
+            text=f" {self.icons['open']} Abrir",
+            state=tk.DISABLED,
+            command=self.open_file
+        )
+        self.open_link_btn.pack(side=tk.LEFT, padx=2)
+        
+        # Actualizar estado del botón cuando cambia el enlace
+        self.enlace_entry.bind("<KeyRelease>", self.update_open_button_state)
+
+    def setup_action_buttons(self):
+        """Configura los botones de acción"""
+        btn_frame = ttk.Frame(self.main_frame)
+        btn_frame.grid(row=3, column=0, columnspan=2, pady=15)
+        
+        Button(
+            btn_frame,
+            text=f" {self.icons['save']} Guardar Documento",
+            command=self.save_document,
+            bg='#4CAF50',  # Fondo verde
+            fg='black',     # Texto negro
+            padx=10,
+            pady=5
+        ).pack(side=tk.RIGHT, padx=5)
+
+    def select_file(self):
+        """Abre el diálogo para seleccionar archivo"""
+        filetypes = [
+            ('Todos los archivos', '*.*'),
+            ('Documentos PDF', '*.pdf'),
+            ('Documentos Word', '*.doc *.docx'),
+            ('Archivos de texto', '*.txt')
+        ]
+        
+        filepath = filedialog.askopenfilename(
+            title="Seleccionar archivo asociado",
+            filetypes=filetypes
+        )
+        
+        if filepath:
+            self.enlace_entry.delete(0, tk.END)
+            self.enlace_entry.insert(0, filepath)
+            self.update_open_button_state()
+
+    def open_file(self):
+        """Abre el enlace/archivo con el programa predeterminado"""
+        link = self.enlace_entry.get()
+        if not link:
+            return
+            
+        try:
+            # Si es una URL web
+            if link.startswith(('http://', 'https://')):
+                import webbrowser
+                webbrowser.open(link)
+            # Si es un archivo local
+            elif os.path.exists(link):
+                if os.name == 'nt':  # Windows
+                    os.startfile(link)
+                elif os.name == 'posix':  # macOS y Linux
+                    subprocess.run(['xdg-open', link])
+            else:
+                messagebox.showwarning("Enlace no válido", "El enlace no es una URL válida o el archivo no existe")
+        except Exception as e:
+            messagebox.showerror("Error", f"No se pudo abrir el enlace: {e}")
+
+    def update_open_button_state(self, event=None):
+        """Actualiza el estado del botón de abrir enlace"""
+        link = self.enlace_entry.get()
+        if link and (link.startswith(('http://', 'https://')) or os.path.exists(link)):
+            self.open_link_btn.config(state=tk.NORMAL)
+        else:
+            self.open_link_btn.config(state=tk.DISABLED)
+
+     
+    def load_document(self):
+        """Carga los datos del documento para edición"""
+        if not self.document_id:
             return
 
-        conn = None
+        try:
+            conn = connect_to_db(self.parent_app.current_db_path)
+            cursor = conn.cursor()
+
+            cursor.execute("""
+                SELECT cite_key, title, author, year, abstract, 
+                       scolr_tags, etiqueta, cumplimiento_de_criterios, referencia_apa, enlace 
+                FROM documentos 
+                WHERE Cid = ?
+            """, (self.document_id,))
+
+            document = cursor.fetchone()
+            conn.close()
+
+            if not document:
+                messagebox.showwarning("Advertencia", "No se encontró el documento solicitado")
+                self.window.destroy()
+                return
+
+            # Llenar campos (convertir None a string vacío)
+            self.cite_key_entry.insert(0, document[0] or "")
+            self.title_entry.insert(0, document[1] or "")
+            self.author_entry.insert(0, document[2] or "")
+            self.year_entry.insert(0, str(document[3]) if document[3] is not None else "")
+            self.abstract_text.insert("1.0", document[4] or "")
+            self.scolr_tags_entry.insert(0, document[5] or "")
+            self.combobox_etiquetas.set(document[6] or "")
+            self.cumplimiento_entry.insert(0, document[7] or "")
+            self.referencia_apa_entry.insert(0, document[8] or "")
+            if document[9]:  # Si hay enlace
+                self.enlace_entry.insert(0, document[9])
+                self.update_open_button_state()
+
+        except Exception as e:
+            messagebox.showerror("Error", f"No se pudieron cargar los datos del documento: {e}")
+            self.window.destroy()
+
+    def save_document(self):
+        """Guarda los datos del documento"""
+        # Obtener todos los valores del formulario
+        data = (
+            self.cite_key_entry.get().strip(),
+            self.title_entry.get().strip(),
+            self.author_entry.get().strip(),
+            self.year_entry.get().strip(),
+            self.abstract_text.get("1.0", tk.END).strip(),
+            self.scolr_tags_entry.get().strip(),
+            self.combobox_etiquetas.get().strip(),
+            self.cumplimiento_entry.get().strip(),
+            self.referencia_apa_entry.get().strip(),
+            self.enlace_entry.get().strip()
+        )
+
+        # Validación de campos requeridos
+        if not all(data[:4]):  # Los primeros 4 campos son obligatorios
+            messagebox.showwarning("Campos requeridos", 
+                                 "Por favor complete los campos obligatorios: CiteKey, Título, Autor y Año")
+            return
+
         try:
             conn = connect_to_db(self.parent_app.current_db_path)
             cursor = conn.cursor()
 
             if self.mode == "create":
                 cursor.execute("""
-                    INSERT INTO documentos (cite_key, title, author, year, abstract, 
-                                        scolr_tags, etiqueta, cumplimiento_de_criterios, referencia_apa, enlace)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?,?)
-                """, (cite_key, title, author, year, abstract, scolr_tags, etiqueta, cumplimiento, referencia_apa, enlace))
-                messagebox.showinfo("Éxito", "Documento creado exitosamente.")
+                    INSERT INTO documentos 
+                    (cite_key, title, author, year, abstract, 
+                     scolr_tags, etiqueta, cumplimiento_de_criterios, referencia_apa, enlace)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, data)
+                message = "Documento creado exitosamente."
             elif self.mode == "edit":
                 cursor.execute("""
-                    UPDATE documentos
-                    SET cite_key = ?, title = ?, author = ?, year = ?, abstract = ?, 
-                        scolr_tags = ?, etiqueta = ?, cumplimiento_de_criterios = ?, referencia_apa = ?, enlace = ?
+                    UPDATE documentos SET
+                    cite_key = ?, title = ?, author = ?, year = ?, abstract = ?,
+                    scolr_tags = ?, etiqueta = ?, cumplimiento_de_criterios = ?, referencia_apa = ?, enlace = ?
                     WHERE Cid = ?
-                """, (cite_key, title, author, year, abstract, scolr_tags, etiqueta, cumplimiento, referencia_apa, enlace, self.document_id))
-                messagebox.showinfo("Éxito", "Documento actualizado exitosamente.")
+                """, (*data, self.document_id))
+                message = "Documento actualizado exitosamente."
 
             conn.commit()
-
+            conn.close()
+            
             # Actualizar la lista de documentos en la ventana principal
-            app_instance = self.window.master._app_instance
-            if app_instance:
-                #app_instance.load_documents()
-                self.refresh_ui()
-
+            if hasattr(self.parent_app, 'load_documents'):
+                self.parent_app.load_documents()
+            
+            messagebox.showinfo("Éxito", message)
             self.window.destroy()
 
-        except sqlite3.Error as e:
-            messagebox.showerror("Error de Base de Datos", f"No se pudo guardar el documento: {str(e)}")
-            if conn:
-                conn.rollback()
         except Exception as e:
-            messagebox.showerror("Error", f"Ocurrió un error inesperado: {str(e)}")
-            if conn:
-                conn.rollback()
-        finally:
-            if conn:
-                conn.close()
-                
+            messagebox.showerror("Error", f"No se pudo guardar el documento: {e}")
+
+    def on_close(self):
+        """Maneja el cierre de la ventana"""
+        self.window.destroy()               
                 
 
 
