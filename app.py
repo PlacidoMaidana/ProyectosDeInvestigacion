@@ -4,13 +4,13 @@ from list_manager import ListManager
 from db_setup import init_db, connect_to_db  # Importar lógica de base de datos
 from analisis import AnalysisForm  # Archivo que maneja la ficha de análisis
 from proyecto import ProyectoManager  # Importar el gestor de proyectos
-from bib_importer import BibImporter
+from bib_importer import BibImporter, ImportarBibVentana
 import sqlite3 
 from importar_enlaces import importar_enlaces
 import webbrowser
 import os
 from importar_texto import ImportarTextoVentana
-
+from IA_analisis import copiar_seleccion_como_csv, exportar_a_csv
 
 # Crear una instancia global (o puedes pasarla como parámetro)
 list_manager = ListManager()
@@ -25,6 +25,8 @@ class App:
         self.current_db_path = "default_project.db"  # Ruta inicial predeterminada
         self.db_connection = None  # Inicialización de la conexión
         self.bib_importer = None  # Inicialización del importador
+        
+        
         
         # Inicializar archivos CSV al inicio del programa
         list_manager.inicializar_archivos_csv()
@@ -67,9 +69,30 @@ class App:
         command=self.import_text_to_database,  # Llama al método intermedio
         state=tk.NORMAL  # Activado de forma predeterminada
         )
-        
+        self.import_menu.add_command(
+            label="Importar desde .bib",
+            command=lambda: ImportarBibVentana(self.master, self.current_db_path),
+            state=tk.NORMAL
+        )
+
         
         self.menu_bar.add_cascade(label="Importaciones", menu=self.import_menu)
+        
+        
+        # Crear el Combobox para seleccionar etiquetas (el filtro)
+        self.filter_combobox = ttk.Combobox(self.master, state="readonly")
+        self.filter_combobox['values'] = ["Todos", "INCLUIDO", "EXCLUIDO", "INTERESANTE"]
+        self.filter_combobox.current(0)  # Por defecto, mostrar "Todos"
+        self.filter_combobox.pack(pady=10)
+
+        # Conectar el evento de cambio de selección
+        self.filter_combobox.bind("<<ComboboxSelected>>", self.filtrar_por_etiqueta)
+
+
+        
+        
+        
+        
 
         # Configurar Treeview
         tree_frame = ttk.Frame(self.master)
@@ -77,7 +100,8 @@ class App:
         self.tree = ttk.Treeview(
             tree_frame,
             columns=("Cid", "CiteKey", "Title", "Author", "Year", "Etiqueta", "Cumplimiento", "ReferenciaAPA","Enlace", "Actions"),
-            show="headings"
+            show="headings",
+            selectmode="extended"  # Permitir selección múltiple
         )
         self.tree.heading("Cid", text="ID")
         self.tree.heading("CiteKey", text="CiteKey")
@@ -115,6 +139,9 @@ class App:
         # Empaquetar el Treeview
         self.tree.pack(fill=tk.BOTH, expand=True)
 
+
+        self.crear_menu_contextual()
+
         # Botones CRUD
         self.crud_frame = tk.Frame(self.master)
         self.crud_frame.pack(pady=10)
@@ -125,6 +152,54 @@ class App:
 
         # Conectar a la base de datos por defecto
         self.switch_database(self.current_db_path)
+
+
+
+    def filtrar_por_etiqueta(self, event=None):
+        """
+        Filtra los registros en el Treeview según la etiqueta seleccionada.
+        """
+        etiqueta_seleccionada = self.filter_combobox.get()
+    
+        # Conectar a la base de datos
+        try:
+            conn = sqlite3.connect(self.current_db_path)
+            cursor = conn.cursor()
+    
+            # Construir la consulta SQL
+            if etiqueta_seleccionada == "Todos":
+                query = "SELECT Cid, cite_key, title, author, year, etiqueta, cumplimiento_de_criterios FROM documentos"
+                cursor.execute(query)
+            else:
+                query = """
+                    SELECT Cid, cite_key, title, author, year, etiqueta, cumplimiento_de_criterios
+                    FROM documentos
+                    WHERE etiqueta = ?
+                """
+                cursor.execute(query, (etiqueta_seleccionada,))
+    
+            # Obtener los resultados
+            registros = cursor.fetchall()
+    
+            # Limpiar el Treeview antes de cargar los nuevos datos
+            for item in self.tree.get_children():
+                self.tree.delete(item)
+    
+            # Insertar los registros filtrados en el Treeview
+            for registro in registros:
+                self.tree.insert("", "end", values=registro)
+    
+        except sqlite3.Error as e:
+            messagebox.showerror("Error", f"Error al filtrar los registros: {e}")
+        finally:
+            if conn:
+                conn.close()
+
+
+
+
+
+
 
     def switch_database(self, new_db_path):
         # Desconectar base anterior
@@ -255,6 +330,46 @@ class App:
 
         except Exception as e:
             messagebox.showerror("Error", f"No se pudo abrir el análisis: {str(e)}")
+    
+    def crear_menu_contextual(self):
+        # Crear el menú contextual
+        self.menu_contextual = tk.Menu(self.master, tearoff=0)
+        self.menu_contextual.add_command(label="Copiar selección como CSV", command=self.copiar_seleccion_como_csv)
+
+        # Vincular el evento de clic derecho al Treeview
+        self.tree.bind("<Button-3>", self.mostrar_menu_contextual)  # Botón derecho del mouse
+    
+    def mostrar_menu_contextual(self, event):
+        try:
+            self.menu_contextual.tk_popup(event.x_root, event.y_root)  # Mostrar el menú en la posición del clic
+        except Exception as e:
+            print(f"Error al mostrar el menú contextual: {str(e)}")
+    
+    def copiar_seleccion_como_csv(self):
+        try:
+            selected_items = self.tree.selection()
+            if not selected_items:
+                messagebox.showwarning("Advertencia", "No se seleccionaron registros para copiar.")
+                return
+
+            csv_data = ""
+            for item in selected_items:
+                row_values = self.tree.item(item, "values")
+                csv_data += ",".join(str(value) for value in row_values) + "\n"
+
+            # Copiar al portapapeles
+            self.master.clipboard_clear()
+            self.master.clipboard_append(csv_data.strip())
+            self.master.update()
+
+            messagebox.showinfo("Éxito", "Registros seleccionados copiados como CSV.")
+        except Exception as e:
+            messagebox.showerror("Error", f"No se pudo copiar los registros: {str(e)}")
+    
+    
+    
+    
+    
                         
     def open_project_manager(self):
         ProyectoManager(self.master)        

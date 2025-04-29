@@ -1,11 +1,15 @@
 import re
 import sqlite3
-from tkinter import filedialog, messagebox
+from tkinter import ttk,filedialog, messagebox
 import tkinter as tk
+
 from typing import Optional
 import bibtexparser
 from bibtexparser.bparser import BibTexParser
 from bibtexparser.customization import convert_to_unicode
+
+
+
 
 class BibImporter:
     def __init__(self, db_path: str):
@@ -279,3 +283,133 @@ class BibImporter:
                 self.top.destroy()
         
         return ProgressDialog(parent, total_entries)
+    
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+def obtener_campo_bib(bloque, campo):
+    """
+    Extrae el valor de un campo específico dentro de un bloque .bib.
+    Limpia caracteres extraños como "}," al final de los valores.
+    """
+    for line in bloque.split("\n"):
+        if campo in line:
+            value = line.split("=", 1)[1].strip().strip("{}").strip(",}")
+            return value
+    raise ValueError(f"Campo '{campo}' no encontrado en el bloque.") 
+ 
+ 
+
+ 
+def procesar_bib_generativo(contenido):
+    registros = []
+    bloques = contenido.split("@misc")
+    for bloque in bloques:
+        print(f"Bloque bruto: {bloque}")  # Depuración
+        bloque = bloque.strip()
+        if not bloque:
+            continue
+
+        try:
+            Cid_raw = obtener_campo_bib(bloque, "id")
+            Cid_cleaned = Cid_raw.strip(",}")
+            if not Cid_cleaned.isdigit():
+                raise ValueError(f"Valor inválido para Cid: {Cid_raw}")
+            Cid = int(Cid_cleaned)
+            evaluacion = obtener_campo_bib(bloque, "evaluacion")
+            detalle = obtener_campo_bib(bloque, "detalle")
+            analisis_detallado = obtener_campo_bib(bloque, "analisis_detallado")
+            registros.append((Cid, evaluacion, detalle, analisis_detallado))
+        except ValueError as e:
+            print(f"Error procesando bloque .bib: {e}")
+
+    print(f"Registros procesados: {registros}")  # Depuración final
+    return registros
+
+
+
+def actualizar_registros_generativos(registros, db_path):
+    """
+    Actualiza los registros de la tabla documentos y agrega análisis generativos.
+    Cada registro utiliza Cid como identificador único.
+    """
+    try:
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+
+        registros_actualizados = 0
+        for Cid, evaluacion, detalle, analisis_detallado in registros:
+            # Actualizar campos en la tabla documentos
+            cursor.execute("""
+                UPDATE documentos
+                SET etiqueta = ?, cumplimiento_de_criterios = ?
+                WHERE Cid = ?
+            """, (evaluacion, detalle, Cid))
+
+            if cursor.rowcount > 0:
+                # Agregar análisis en la tabla analisis
+                cursor.execute("""
+                    INSERT INTO analisis (documento_id, dimension, descripcion)
+                    VALUES (?, ?, ?)
+                """, (Cid, "Resumen IA", analisis_detallado))
+                registros_actualizados += 1
+            else:
+                print(f"Registro con Cid {Cid} no encontrado. Será ignorado.")
+
+        conn.commit()
+        print(f"Registros actualizados: {registros_actualizados}")
+    except sqlite3.Error as e:
+        raise Exception(f"Error al actualizar la base de datos: {e}")
+    finally:
+        if conn:
+            conn.close()
+            
+            
+            
+            
+            
+            
+                    
+# Clase para la ventana modal
+
+class ImportarBibVentana:
+    def __init__(self, master, db_path):
+        self.master = master
+        self.db_path = db_path
+
+        self.modal_window = tk.Toplevel(self.master)
+        self.modal_window.title("Importar desde .bib generativo")
+        self.modal_window.geometry("600x400")
+        self.modal_window.transient(self.master)
+        self.modal_window.grab_set()
+
+        ttk.Label(self.modal_window, text="Introduce el contenido .bib:", font=("Arial", 12)).pack(pady=10)
+        self.text_input = tk.Text(self.modal_window, wrap="word", font=("Arial", 10))
+        self.text_input.pack(fill="both", expand=True, padx=10, pady=10)
+        ttk.Button(self.modal_window, text="Procesar e Importar", command=self.procesar_bib_generativo).pack(pady=10)
+
+    def procesar_bib_generativo(self):
+        contenido = self.text_input.get("1.0", tk.END).strip()
+        if not contenido:
+            messagebox.showerror("Error", "El contenido está vacío. Por favor pega el listado .bib.")
+            return
+
+        try:
+            registros = procesar_bib_generativo(contenido)
+            if registros:
+                actualizar_registros_generativos(registros, self.db_path)
+                messagebox.showinfo("Éxito", f"Se procesaron e importaron {len(registros)} registros correctamente.")
+                self.modal_window.destroy()
+            else:
+                messagebox.showwarning("Advertencia", "No se encontraron registros válidos en el contenido.")
+        except Exception as e:
+            messagebox.showerror("Error", f"Fallo en el procesamiento: {e}")
