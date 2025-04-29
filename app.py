@@ -756,30 +756,29 @@ class DocumentForm:
         self.main_frame.columnconfigure(1, weight=1)
 
     def setup_basic_info_section(self):
-        """Configura la sección de información básica"""
+        """Configura los campos de información básica"""
+        # Crear el marco (LabelFrame) para los campos de información básica
         section_frame = ttk.LabelFrame(
             self.main_frame, 
             text=" Información Básica ",
             style='Section.TFrame'
         )
         section_frame.grid(row=0, column=0, columnspan=2, sticky="nsew", padx=10, pady=10)
-        
-        # Campos de información básica
+
+        # Configura los campos dentro del marco
         fields = [
             ("CiteKey:", "cite_key_entry", True),
             ("Título:", "title_entry", True),
             ("Autor:", "author_entry", True),
             ("Año:", "year_entry", True)
         ]
-        
+
         for i, (label, field_name, required) in enumerate(fields):
             ttk.Label(section_frame, text=label).grid(row=i, column=0, sticky="e", padx=5, pady=5)
             entry = ttk.Entry(section_frame, width=50)
             entry.grid(row=i, column=1, sticky="ew", padx=5, pady=5)
-            setattr(self, field_name, entry)
-            
-            if required:
-                ttk.Label(section_frame, text="*", foreground="red").grid(row=i, column=2, sticky="w")
+            setattr(self, field_name, entry)  # Vincular el campo al atributo
+            print(f"Campo {field_name} inicializado: {getattr(self, field_name)}")  # Depuración    
 
     def setup_abstract_section(self):
         """Configura la sección de resumen/abstract"""
@@ -988,6 +987,12 @@ class DocumentForm:
         else:
             self.open_link_btn.config(state=tk.DISABLED)
 
+
+
+
+
+
+
      
     def load_document(self):
         """Carga los datos del documento para edición"""
@@ -995,6 +1000,8 @@ class DocumentForm:
             return
 
         try:
+            print(f"Usando la base de datos en el metodo LOAD: {self.parent_app.current_db_path}")
+
             conn = connect_to_db(self.parent_app.current_db_path)
             cursor = conn.cursor()
 
