@@ -4,11 +4,12 @@ from tkinter import ttk, Label, Entry, Toplevel, Button, messagebox, Frame, Scro
 from db_setup import connect_to_db
 
 class ProyectoForm:
-    def __init__(self, parent, mode, project_id=None):
+    def __init__(self, parent, mode, project_id=None, current_db_path=None):
         self.window = Toplevel(parent)
         self.window.title("Formulario Proyecto")
         self.mode = mode
         self.project_id = project_id
+        self.current_db_path=current_db_path
 
         Label(self.window, text="Nombre del Proyecto:").pack()
         self.nombre_entry = Entry(self.window, width=40)
@@ -27,7 +28,7 @@ class ProyectoForm:
         if not self.project_id:
             return
 
-        conn = connect_to_db(current_db_path)
+        conn = connect_to_db(self.current_db_path)
         cursor = conn.cursor()
         cursor.execute("SELECT nombre, descripcion FROM proyecto WHERE id = ?", (self.project_id,))
         project = cursor.fetchone()
@@ -41,7 +42,7 @@ class ProyectoForm:
         nombre = self.nombre_entry.get()
         descripcion = self.descripcion_entry.get()
 
-        conn = connect_to_db(current_db_path)
+        conn = connect_to_db(self.current_db_path)
         cursor = conn.cursor()
 
         if self.mode == "create":
@@ -61,9 +62,14 @@ class ProyectoForm:
                 child.load_projects()
 
 class ProyectoManager:
-    def __init__(self, parent):
+    def __init__(self, parent,current_db_path ):
         self.window = Toplevel(parent)
         self.window.title("Gestión de Proyectos")
+
+         # Almacenar la ruta de la base de datos y crear la conexión
+        self.current_db_path = current_db_path
+        self.conn = connect_to_db(current_db_path)  # Guardar la conexión como atributo
+
 
         self.tree = ttk.Treeview(self.window, columns=("ID", "Nombre", "Descripción"), show="headings")
         self.tree.heading("ID", text="ID")
@@ -78,7 +84,7 @@ class ProyectoManager:
         Button(self.window, text="Eliminar Proyecto", command=self.delete_project).pack(side=tk.LEFT, padx=5)
 
     def load_projects(self):
-        conn = connect_to_db(current_db_path)
+        conn = connect_to_db(self.current_db_path)
         cursor = conn.cursor()
         cursor.execute("SELECT id, nombre, descripcion FROM proyecto")
         rows = cursor.fetchall()
@@ -89,7 +95,7 @@ class ProyectoManager:
             self.tree.insert("", "end", values=row)
 
     def create_project(self):
-        ProyectoForm(self.window, mode="create")
+        ProyectoForm(self.window, mode="create",current_db_path=self.current_db_path)
 
     def update_project(self):
         selected_item = self.tree.selection()
@@ -98,7 +104,7 @@ class ProyectoManager:
             return
 
         project_id = self.tree.item(selected_item[0])["values"][0]
-        ProyectoForm(self.window, mode="edit", project_id=project_id)
+        ProyectoForm(self.window, mode="edit", project_id=project_id, current_db_path=self.current_db_path)
 
     def delete_project(self):
         selected_item = self.tree.selection()
@@ -107,7 +113,7 @@ class ProyectoManager:
             return
 
         project_id = self.tree.item(selected_item[0])["values"][0]
-        conn = connect_to_db(current_db_path)
+        conn = connect_to_db(self.current_db_path)
         cursor = conn.cursor()
         cursor.execute("DELETE FROM proyecto WHERE id = ?", (project_id,))
         conn.commit()

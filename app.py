@@ -91,7 +91,6 @@ class App:
         self.list_manager.actualizar_combobox(self.filter_combobox, "etiquetas.csv", valor_predeterminado="Todos")
         self.filter_combobox.pack(side=tk.LEFT, padx=5)  # Coloca el ComboBox a la izquierda con margen horizontal
         self.filter_combobox.bind("<<ComboboxSelected>>", self.filtrar_por_etiqueta)
-        
         # Botón para editar etiquetas
         ttk.Button(
             combo_frame,
@@ -380,7 +379,7 @@ class App:
     
                         
     def open_project_manager(self):
-        ProyectoManager(self.master)        
+        ProyectoManager(self.master,self.current_db_path)        
                 
     # Modifica el método load_documents:
     def load_documents(self):
