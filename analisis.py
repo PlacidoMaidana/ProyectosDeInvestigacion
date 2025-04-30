@@ -176,6 +176,44 @@ class AnalysisForm:
             self.parent.focus_set()
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+import tkinter as tk
+from tkinter import ttk, messagebox, filedialog
+from tkinter.font import Font
+import os
+from db_setup import connect_to_db
+from list_manager import ListManager
+
 class AnalysisFormEditor:
     def __init__(self, parent, document_id, db_path, mode, analysis_id=None):
         self.parent = parent
@@ -183,66 +221,198 @@ class AnalysisFormEditor:
         self.db_path = db_path
         self.mode = mode
         self.analysis_id = analysis_id
+        self.archivo_path = ""
         
-        self.window = Toplevel(parent)
-        self.window.title("Editor de Análisis")
-        self.window.geometry("600x400")
-        self.window.transient(parent)  # Establecer relación padre-hijo
+        # Configurar iconos (asegúrate de tener estos iconos en tu proyecto)
+        self.icons = {
+            'save': '💾',
+            'file': '📎',
+            'open': '📂',
+            'edit': '✏️',
+            'dimension': '📊'
+        }
         
-        # Frame principal
-        main_frame = ttk.Frame(self.window, padding=10)
-        main_frame.pack(fill=tk.BOTH, expand=True)
+        self.create_window()
+        self.create_widgets()
+        self.load_initial_data()
         
-        # Inicializar archivos CSV al inicio del programa
-        list_manager.inicializar_archivos_csv()
-        
-        # Por esto:
-        ttk.Label(main_frame, text="Dimensión:").grid(row=0, column=0, sticky="w", pady=5)
-        self.combobox_dimensiones = ttk.Combobox(main_frame, width=47)  # Ajustar ancho similar al Entry
-        self.combobox_dimensiones.grid(row=0, column=1, sticky="ew", pady=5)
-
-        # Botón para editar lista de dimensiones
-        ttk.Button(main_frame, text="Editar lista de dimensiones",
-                  command=lambda: list_manager.editar_lista_csv('dimensiones.csv', 'Dimensiones de Análisis')
-                  ).grid(row=1, column=0, columnspan=2, pady=5)
-        
-        # Descripción
-        ttk.Label(main_frame, text="Descripción:").grid(row=1, column=0, sticky="nw", pady=5)
-        
-        desc_frame = ttk.Frame(main_frame)
-        desc_frame.grid(row=1, column=1, sticky="nsew")
-        
-        self.desc_text = Text(desc_frame, wrap="word", height=10)
-        scrollbar = ttk.Scrollbar(desc_frame, orient="vertical", command=self.desc_text.yview)
-        self.desc_text.configure(yscrollcommand=scrollbar.set)
-        
-        scrollbar.pack(side="right", fill="y")
-        self.desc_text.pack(side="left", fill="both", expand=True)
-        
-        # Botón Guardar
-        btn_frame = ttk.Frame(main_frame)
-        btn_frame.grid(row=2, column=0, columnspan=2, pady=10)
-        
-        ttk.Button(btn_frame, text="Guardar", command=self.save_analysis).pack(padx=5)
-        
-        # Configurar grid
-        main_frame.columnconfigure(1, weight=1)
-        main_frame.rowconfigure(1, weight=1)
-        
-        # Cargar datos si es edición
         if self.mode == "edit":
             self.load_analysis()
+    
+    def create_window(self):
+        """Crea la ventana principal del formulario"""
+        self.window = tk.Toplevel(self.parent)
+        self.window.title("Editor de Análisis")
+        self.window.geometry("800x600")
+        self.window.minsize(600, 400)
+        self.window.transient(self.parent)
         
-        self.window.focus_set()
-
+        # Configurar el grid principal
+        self.window.columnconfigure(0, weight=1)
+        self.window.rowconfigure(0, weight=1)
+    
+    def create_widgets(self):
+        """Crea y organiza todos los widgets del formulario"""
+        # Frame principal con padding
+        main_frame = ttk.Frame(self.window, padding=15)
+        main_frame.grid(row=0, column=0, sticky="nsew")
+        main_frame.columnconfigure(1, weight=1)
+        main_frame.rowconfigure(3, weight=1)
+        
+        # Título del formulario
+        title_font = Font(size=12, weight="bold")
+        ttk.Label(
+            main_frame, 
+            text="EDITOR DE ANÁLISIS", 
+            font=title_font,
+            foreground="#2c3e50"
+        ).grid(row=0, column=0, columnspan=2, pady=(0, 15))
+        
+        # Dimensión
+        ttk.Label(main_frame, text="Dimensión:").grid(
+            row=1, column=0, sticky="w", pady=5
+        )
+        
+        dimension_frame = ttk.Frame(main_frame)
+        dimension_frame.grid(row=1, column=1, sticky="ew", pady=5)
+        dimension_frame.columnconfigure(0, weight=1)
+        
+        self.combobox_dimensiones = ttk.Combobox(
+            dimension_frame, 
+            font=('Arial', 10),
+            width=40
+        )
+        self.combobox_dimensiones.grid(row=0, column=0, sticky="ew")
+        
+        ttk.Button(
+            dimension_frame,
+            text=f" {self.icons['edit']} Editar dimensiones",
+            command=lambda: ListManager().editar_lista_csv('dimensiones.csv', 'Dimensiones de Análisis'),
+            style='TButton'
+        ).grid(row=0, column=1, padx=(10, 0))
+        
+        # Archivo adjunto
+        ttk.Label(main_frame, text="Archivo adjunto:").grid(
+            row=2, column=0, sticky="w", pady=5
+        )
+        
+        file_frame = ttk.Frame(main_frame)
+        file_frame.grid(row=2, column=1, sticky="ew", pady=5)
+        file_frame.columnconfigure(0, weight=1)
+        
+        self.file_entry = ttk.Entry(file_frame, font=('Arial', 10))
+        self.file_entry.grid(row=0, column=0, sticky="ew")
+        
+        ttk.Button(
+            file_frame,
+            text=f" {self.icons['file']} Seleccionar",
+            command=self.select_file,
+            style='TButton'
+        ).grid(row=0, column=1, padx=(10, 0))
+        
+        ttk.Button(
+            file_frame,
+            text=f" {self.icons['open']} Abrir",
+            command=self.open_file,
+            style='TButton'
+        ).grid(row=0, column=2, padx=(10, 0))
+        
+        # Descripción
+        ttk.Label(main_frame, text="Descripción:").grid(
+            row=3, column=0, sticky="nw", pady=5
+        )
+        
+        desc_frame = ttk.Frame(main_frame)
+        desc_frame.grid(row=3, column=1, sticky="nsew", pady=5)
+        desc_frame.rowconfigure(0, weight=1)
+        desc_frame.columnconfigure(0, weight=1)
+        
+        # Text widget con scrollbars
+        self.desc_text = tk.Text(
+            desc_frame, 
+            wrap="word", 
+            font=('Arial', 10),
+            padx=10,
+            pady=10,
+            insertbackground='black',
+            selectbackground='#3498db'
+        )
+        
+        scroll_y = ttk.Scrollbar(desc_frame, orient="vertical", command=self.desc_text.yview)
+        scroll_x = ttk.Scrollbar(desc_frame, orient="horizontal", command=self.desc_text.xview)
+        self.desc_text.configure(
+            yscrollcommand=scroll_y.set,
+            xscrollcommand=scroll_x.set
+        )
+        
+        # Grid para el texto y scrollbars
+        self.desc_text.grid(row=0, column=0, sticky="nsew")
+        scroll_y.grid(row=0, column=1, sticky="ns")
+        scroll_x.grid(row=1, column=0, sticky="ew")
+        
+        # Botones de acción
+        btn_frame = ttk.Frame(main_frame)
+        btn_frame.grid(row=4, column=0, columnspan=2, pady=(20, 0))
+        
+        Button(
+            btn_frame,
+            text=f" {self.icons['save']} Guardar Análisis",
+            command=self.save_analysis,
+            bg='#4CAF50',  # Fondo verde
+            fg='black',     # Texto negro
+            padx=10,
+            pady=5
+        ).pack(side=tk.RIGHT, padx=5)
+        
+        
+        
+        
+        # Configurar estilo para el botón de guardar
+        style = ttk.Style()
+        style.configure('Accent.TButton', 
+                      foreground='white', 
+                      background='#27ae60',
+                      font=('Arial', 10, 'bold'),
+                      padding=6)
+        style.map('Accent.TButton',
+                background=[('active', '#2ecc71'), ('pressed', '#16a085')])
+    
+    def load_initial_data(self):
+        """Carga las dimensiones desde el ListManager"""
+        list_manager = ListManager()
+        list_manager.inicializar_archivos_csv()
+        dimensiones = list_manager.cargar_lista_desde_csv('dimensiones.csv')
+        self.combobox_dimensiones['values'] = dimensiones
+        self.combobox_dimensiones.set("Seleccionar" if dimensiones else "")
+    
+    def select_file(self):
+        """Abre el diálogo para seleccionar un archivo"""
+        file_path = filedialog.askopenfilename()
+        if file_path:
+            self.archivo_path = file_path
+            self.file_entry.delete(0, tk.END)
+            self.file_entry.insert(0, os.path.basename(file_path))
+    
+    def open_file(self):
+        """Abre el archivo adjunto con el programa predeterminado"""
+        if self.archivo_path and os.path.exists(self.archivo_path):
+            try:
+                os.startfile(self.archivo_path)  # Para Windows
+            except AttributeError:
+                import subprocess
+                subprocess.run(['open', self.archivo_path])  # Para macOS
+                # Para Linux podrías usar 'xdg-open'
+        else:
+            messagebox.showwarning("Advertencia", "No hay archivo adjunto o el archivo no existe")
+    
     def load_analysis(self):
-        """Cargar datos del análisis para edición"""
+        """Carga los datos del análisis para edición"""
         conn = None
         try:
             conn = connect_to_db(self.db_path)
             cursor = conn.cursor()
             cursor.execute(
-                "SELECT dimension, descripcion FROM analisis WHERE id = ?",
+                "SELECT dimension, descripcion, archivo FROM analisis WHERE id = ?",
                 (self.analysis_id,)
             )
             result = cursor.fetchone()
@@ -250,20 +420,23 @@ class AnalysisFormEditor:
             if result:
                 self.combobox_dimensiones.set(result[0])
                 self.desc_text.insert("1.0", result[1])
+                if result[2]:
+                    self.archivo_path = result[2]
+                    self.file_entry.insert(0, os.path.basename(result[2]))
                 
         except Exception as e:
             messagebox.showerror("Error", f"Error al cargar datos: {str(e)}")
         finally:
             if conn:
                 conn.close()
-
+    
     def save_analysis(self):
-        """Guardar el análisis en la base de datos"""
+        """Guarda el análisis en la base de datos"""
         dimension = self.combobox_dimensiones.get().strip()
         descripcion = self.desc_text.get("1.0", "end-1c").strip()
         
-        if not dimension:
-            messagebox.showwarning("Advertencia", "La dimensión no puede estar vacía")
+        if not dimension or dimension == "Seleccionar":
+            messagebox.showwarning("Advertencia", "Debe seleccionar una dimensión")
             return
             
         conn = None
@@ -273,16 +446,21 @@ class AnalysisFormEditor:
             
             if self.mode == "create":
                 cursor.execute(
-                    "INSERT INTO analisis (documento_id, dimension, descripcion) VALUES (?, ?, ?)",
-                    (self.document_id, dimension, descripcion)
+                    """INSERT INTO analisis 
+                    (documento_id, dimension, descripcion, archivo) 
+                    VALUES (?, ?, ?, ?)""",
+                    (self.document_id, dimension, descripcion, self.archivo_path)
                 )
             else:
                 cursor.execute(
-                    "UPDATE analisis SET dimension = ?, descripcion = ? WHERE id = ?",
-                    (dimension, descripcion, self.analysis_id)
+                    """UPDATE analisis 
+                    SET dimension = ?, descripcion = ?, archivo = ? 
+                    WHERE id = ?""",
+                    (dimension, descripcion, self.archivo_path, self.analysis_id)
                 )
             
             conn.commit()
+            messagebox.showinfo("Éxito", "Análisis guardado correctamente")
             self.window.destroy()
             
         except Exception as e:

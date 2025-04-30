@@ -55,11 +55,18 @@ class ProyectoForm:
         if self.mode == "edit":
             self.load_project()
 
-        # Configurar estilo para botón destacado
+              # Configurar estilo para el botón destacado
+        self.style = ttk.Style()
         self.style.configure('Accent.TButton', 
-                          foreground='white', 
-                          background='#3498db',
-                          font=('Arial', 10, 'bold'))
+                           foreground='white',          # Letras blancas
+                           background='#27ae60',       # Verde esmeralda (color que enviaste)
+                           font=('Arial', 10, 'bold'), # Fuente en negrita
+                           padding=8)                  # Espaciado interno
+
+        # Configurar estados del botón (hover y pressed)
+        self.style.map('Accent.TButton',
+                      background=[('active', '#2ecc71'),   # Verde más claro al pasar mouse
+                                 ('pressed', '#16a085')]) # Verde más oscuro al presionar
 
     def create_label_entry(self, parent, label_text, icon_key):
         """Crea un campo de entrada con etiqueta e icono"""
@@ -132,11 +139,18 @@ class ProyectoForm:
         btn_frame = ttk.Frame(parent)
         btn_frame.pack(fill=X, pady=15)
         
-        ttk.Button(btn_frame,
-                  text=f" {self.icons['save']}  Guardar Proyecto",
-                  command=self.save_project,
-                  style='Accent.TButton').pack(side=RIGHT)
-
+        
+        Button(
+            btn_frame,
+            text=f" {self.icons['save']} Guardar Proyecto",
+            command=self.save_project,
+            bg='#4CAF50',  # Fondo verde
+            fg='black',     # Texto negro
+            padx=10,
+            pady=5
+        ).pack(side=tk.RIGHT, padx=5)
+        
+       
     def select_file(self):
         """Abre el diálogo para seleccionar archivo"""
         filetypes = [

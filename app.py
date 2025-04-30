@@ -11,15 +11,31 @@ import webbrowser
 import os
 from importar_texto import ImportarTextoVentana
 from IA_analisis import copiar_seleccion_como_csv, exportar_a_csv
+from analysis_grid import AnalysisGrid
+
+
+
+
+
+
+
 
 # Crear una instancia global (o puedes pasarla como parámetro)
 list_manager = ListManager()
 # Ventana principal
 class App:
     def __init__(self, master):
+        # self.master = tk.Tk()  # Ventana principal de la aplicación
+
         self.master = master
         self.master.title("Gestión de Documentos y Análisis")
         self.analysis_windows = {}  # Diccionario para manejar las ventanas de análisis
+
+        # self.master.iconbitmap("LitCompare.ico")
+        
+        # Para hacer el ejecutable 
+        # pyinstaller --onefile --icon=LitCompare.ico --name=LitCompare app.py
+
 
         # Inicializar atributos
         self.current_db_path = "default_project.db"  # Ruta inicial predeterminada
@@ -77,6 +93,15 @@ class App:
 
         
         self.menu_bar.add_cascade(label="Importaciones", menu=self.import_menu)
+        
+        # Menú de Análisis
+        analysis_menu = tk.Menu(self.menu_bar, tearoff=0)
+        analysis_menu.add_command(
+            label="Ver análisis de documentos",
+            command=self.show_analysis_grid,
+            accelerator="Ctrl+A"
+        )
+        self.menu_bar.add_cascade(label="Análisis", menu=analysis_menu)
         
         
         # Crear una instancia de ListManager
@@ -159,6 +184,30 @@ class App:
 
         # Conectar a la base de datos por defecto
         self.switch_database(self.current_db_path)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -374,7 +423,10 @@ class App:
             messagebox.showerror("Error", f"No se pudo copiar los registros: {str(e)}")
     
     
-    
+    def show_analysis_grid(self):
+        """Muestra la grilla de análisis de documentos"""
+        from analysis_grid import AnalysisGrid
+        AnalysisGrid(self, self.current_db_path)
     
     
                         
@@ -686,8 +738,7 @@ class DocumentForm:
         self.parent_app = parent  # Aquí guardamos la referencia a App
         self.mode = mode
         self.document_id = document_id
-        print(f"Usando la base de datos: {self.parent_app.current_db_path}")
-
+        
         # Configuración de la ventana
         self.window = tk.Toplevel(parent.master)
         self.window.title("?? Formulario de Documento")
