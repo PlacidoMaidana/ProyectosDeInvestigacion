@@ -31,11 +31,13 @@ class App:
         self.master.title("Gestión de Documentos y Análisis")
         self.analysis_windows = {}  # Diccionario para manejar las ventanas de análisis
 
-        # self.master.iconbitmap("LitCompare.ico")
+        #self.master.iconbitmap("LitCompare.ico")
+        self.root=root
+        #self.root.iconbitmap("LitCompare.ico")  # Reemplaza con la ruta de tu archivo .ico
         
         # Para hacer el ejecutable 
-        # pyinstaller --onefile --icon=LitCompare.ico --name=LitCompare app.py
-
+        # pyinstaller --onefile --noconsole --icon=LitCompare.ico --name=LitCompare app.py
+        # pyinstaller --onefile --noconsole --name=LitCompare app.py
 
         # Inicializar atributos
         self.current_db_path = "default_project.db"  # Ruta inicial predeterminada
@@ -208,7 +210,10 @@ class App:
 
 
 
-
+    def set_window_title(self):
+        # Extraer el nombre del archivo de la ruta de la base de datos
+        db_name = self.current_db_path.split("/")[-1] if self.current_db_path else "Sin base de datos"
+        self.root.title(f"Gestión de Documentos - {self.current_db_path}")
 
 
     def filtrar_por_etiqueta(self, event=None):
@@ -269,6 +274,8 @@ class App:
             return
 
         self.current_db_path = new_db_path  # Actualizar ruta actual
+        self.set_window_title()
+
         self.refresh_ui()  # Refrescar la interfaz (cargar datos en Treeview)
 
 
@@ -603,7 +610,7 @@ class App:
       
     def create_document(self):
         # Abrir el formulario para crear un documento
-        DocumentForm(self.master, mode="create")
+        DocumentForm(self.master, mode="create",db_path=self.current_db_path)
         
         
     def update_document(self):
@@ -622,7 +629,7 @@ class App:
                 print(f"Preparando para editar documento ID: {document_id}")  # Debug
 
                 # Pasar la referencia de la app principal al formulario
-                form = DocumentForm(self, mode="edit", document_id=document_id)
+                form = DocumentForm(self, mode="edit", document_id=document_id,db_path=self.current_db_path)
                 form.parent_app = self  # Esto permite acceder a current_db_path
 
                 # No es necesario llamar a load_document aquí, ya se llama en DocumentForm.__init__
@@ -733,11 +740,12 @@ from tkinter import ttk, filedialog, messagebox
 from tkinter.font import Font
 
 class DocumentForm:
-    def __init__(self, parent, mode, document_id=None):
-       
-        self.parent_app = parent  # Aquí guardamos la referencia a App
+    def __init__(self, parent, mode, document_id=None,db_path =None):
+        self.parent_app = parent  # Referencia a la app principal
         self.mode = mode
         self.document_id = document_id
+        self.db_path =db_path
+        print(f"la conexion al abrir la ficha {self.db_path}")
         
         # Configuración de la ventana
         self.window = tk.Toplevel(parent.master)
@@ -764,11 +772,22 @@ class DocumentForm:
         self.setup_basic_info_section()
         self.setup_abstract_section()
         self.setup_metadata_section()
-        self.setup_action_buttons()
+        btn_frame = ttk.Frame(self.main_frame)
+        btn_frame.grid(row=3, column=0, columnspan=2, pady=15)
+
+        btn = Button(
+            btn_frame,
+            text="Guardar Documento",  # Solo el texto del botón
+            command=lambda: self.save_document(self.parent_app)  # Acción asociada al botón
+        )
+        btn.pack(side=tk.RIGHT, padx=5)
+
+        #self.setup_action_buttons(self,parent)
+        
         
         # Cargar datos si estamos en modo edición
         if self.mode == "edit":
-            self.load_document()
+            self.load_document(self.parent_app)
         
         # Configuración final de la ventana
         self.window.protocol("WM_DELETE_WINDOW", self.on_close)
@@ -950,7 +969,7 @@ class DocumentForm:
     def setup_file_link_section(self, parent, row):
         """Configura el campo de enlace con selector de archivo"""
         ttk.Label(parent, text="Enlace:").grid(row=row, column=0, sticky="e", padx=5, pady=5)
-        
+        self.parent_app = parent 
         link_frame = ttk.Frame(parent)
         link_frame.grid(row=row, column=1, sticky="ew", padx=5, pady=5)
         
@@ -974,20 +993,23 @@ class DocumentForm:
         # Actualizar estado del botón cuando cambia el enlace
         self.enlace_entry.bind("<KeyRelease>", self.update_open_button_state)
 
-    def setup_action_buttons(self):
+    
+    def setup_action_buttons(self, parent):
         """Configura los botones de acción"""
         btn_frame = ttk.Frame(self.main_frame)
-        btn_frame.grid(row=3, column=0, columnspan=2, pady=15)
-        
-        Button(
+        btn_frame.grid(row=3, column=0, columnspan=2, pady=15)        
+        btn = Button(
             btn_frame,
             text=f" {self.icons['save']} Guardar Documento",
-            command=self.save_document,
-            bg='#4CAF50',  # Fondo verde
-            fg='black',     # Texto negro
+            command=lambda: self.save_document(self.parent_app),
+            bg='#4CAF50',
+            fg='black',
             padx=10,
             pady=5
-        ).pack(side=tk.RIGHT, padx=5)
+        )
+        btn.pack(side=tk.RIGHT, padx=5)
+
+
 
     def select_file(self):
         """Abre el diálogo para seleccionar archivo"""
@@ -1045,15 +1067,16 @@ class DocumentForm:
 
 
      
-    def load_document(self):
+    def load_document(self, parent_app):
         """Carga los datos del documento para edición"""
+        
         if not self.document_id:
             return
 
         try:
-            print(f"Usando la base de datos en el metodo LOAD: {self.parent_app.current_db_path}")
+            print(f"Usando la base de datos en el metodo LOAD: {self.db_path}")
 
-            conn = connect_to_db(self.parent_app.current_db_path)
+            conn = connect_to_db(self.db_path)
             cursor = conn.cursor()
 
             cursor.execute("""
@@ -1089,8 +1112,9 @@ class DocumentForm:
             messagebox.showerror("Error", f"No se pudieron cargar los datos del documento: {e}")
             self.window.destroy()
 
-    def save_document(self):
+    def save_document(self,parent_app):
         """Guarda los datos del documento"""
+        
         # Obtener todos los valores del formulario
         data = (
             self.cite_key_entry.get().strip(),
@@ -1112,7 +1136,9 @@ class DocumentForm:
             return
 
         try:
-            conn = connect_to_db(self.parent_app.current_db_path)
+            conn = connect_to_db(self.db_path)
+
+            print(f"path de la base de datos al guardar {self.db_path}")
             cursor = conn.cursor()
 
             if self.mode == "create":
