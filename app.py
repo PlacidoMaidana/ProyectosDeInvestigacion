@@ -12,7 +12,7 @@ import os
 from importar_texto import ImportarTextoVentana
 from IA_analisis import copiar_seleccion_como_csv, exportar_a_csv
 from analysis_grid import AnalysisGrid
-
+from tkinter import PhotoImage #para el uso de otras imagenes como iconos
 
 
 
@@ -213,7 +213,13 @@ class App:
     def set_window_title(self):
         # Extraer el nombre del archivo de la ruta de la base de datos
         db_name = self.current_db_path.split("/")[-1] if self.current_db_path else "Sin base de datos"
-        self.root.title(f"Gestión de Documentos - {self.current_db_path}")
+        # Extraer solo el nombre del archivo de la ruta completa
+        db_filename = os.path.basename(self.current_db_path)
+
+        # Asignar solo el nombre del archivo a la ventana
+        self.root.title(db_filename)
+
+        #self.root.title(f"Gestión de Documentos - {self.current_db_path}")
 
 
     def filtrar_por_etiqueta(self, event=None):
@@ -1180,5 +1186,12 @@ class DocumentForm:
 if __name__ == "__main__":
     root = tk.Tk()  # Crear la ventana principal
     app = App(root)  # Instanciar la clase App
+    
+    # Cargar la imagen (PNG funciona bien)
+    icono = PhotoImage(file='Libros.png')
+
+    # Establecer el icono
+    root.tk.call('wm', 'iconphoto', root._w, icono)
+
     root._app_instance = app  # Hacer accesible la instancia de App
     root.mainloop()  # Iniciar el bucle de eventos de la aplicación
