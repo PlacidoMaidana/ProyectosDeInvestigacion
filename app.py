@@ -92,6 +92,13 @@ class App:
             command=lambda: ImportarBibVentana(self.master, self.current_db_path),
             state=tk.NORMAL
         )
+        self.import_menu.add_command(
+            label="Importar Archivos desde Carpeta",
+            command=self.importar_archivos,  # Llama al método de importación
+            state=tk.NORMAL
+        )
+
+       
 
         
         self.menu_bar.add_cascade(label="Importaciones", menu=self.import_menu)
@@ -133,7 +140,7 @@ class App:
         tree_frame.pack(fill="both", expand=True)
         self.tree = ttk.Treeview(
             tree_frame,
-            columns=("Cid", "CiteKey", "Title", "Author", "Year", "Etiqueta", "Cumplimiento", "ReferenciaAPA","Enlace", "Actions"),
+            columns=("Cid", "CiteKey", "Title", "Author", "Year","scolr_tags" ,"Etiqueta", "Cumplimiento", "ReferenciaAPA","Enlace", "Actions"),
             show="headings",
             selectmode="extended"  # Permitir selección múltiple
         )
@@ -142,6 +149,7 @@ class App:
         self.tree.heading("Title", text="Título")
         self.tree.heading("Author", text="Autor")
         self.tree.heading("Year", text="Año")
+        self.tree.heading("scolr_tags", text="scolr_tags")
         self.tree.heading("Etiqueta", text="Etiqueta")
         self.tree.heading("Cumplimiento", text="Cumplimiento de Criterios")
         self.tree.heading("ReferenciaAPA", text="Referencia APA")
@@ -153,6 +161,7 @@ class App:
         self.tree.column("Title", width=200, anchor="center")
         self.tree.column("Author", width=150, anchor="center")
         self.tree.column("Year", width=80, anchor="center")
+        self.tree.column("scolr_tags", width=80, anchor="center")
         self.tree.column("Etiqueta", width=100, anchor="center")
         self.tree.column("Cumplimiento", width=150, anchor="center")
         self.tree.column("ReferenciaAPA", width=200, anchor="center")
@@ -235,11 +244,11 @@ class App:
 
             # Construir la consulta SQL
             if etiqueta_seleccionada == "Todos":
-                query = "SELECT Cid, cite_key, title, author, year, etiqueta, cumplimiento_de_criterios FROM documentos"
+                query = "SELECT  Cid, cite_key, title, author, year,scolr_tags, etiqueta, cumplimiento_de_criterios, referencia_apa, enlace FROM documentos"
                 cursor.execute(query)
             else:
                 query = """
-                    SELECT Cid, cite_key, title, author, year, etiqueta, cumplimiento_de_criterios
+                    SELECT  Cid, cite_key, title, author, year,scolr_tags, etiqueta, cumplimiento_de_criterios, referencia_apa, enlace
                     FROM documentos
                     WHERE etiqueta = ?
                 """
@@ -252,9 +261,21 @@ class App:
             for item in self.tree.get_children():
                 self.tree.delete(item)
 
+            # Insertar cada registro en el Treeview con colores alternados
+            for i, row in enumerate(registros):
+                # Determinar etiqueta de color para filas alternadas
+                tag = "odd_row" if i % 2 == 0 else "even_row"
+
+                # Insertar en el Treeview con etiqueta
+                self.tree.insert("", "end", values=(*row, "📝 Analizar"), tags=(tag,))
+
+            # Configurar los estilos para las filas
+            self.tree.tag_configure("odd_row", background="#F0F0F0")  # Color para filas pares
+            self.tree.tag_configure("even_row", background="#FFFFFF")  # Color para filas impares
+            
             # Insertar los registros filtrados en el Treeview
-            for registro in registros:
-                self.tree.insert("", "end", values=registro)
+            #for registro in registros:
+            #    self.tree.insert("", "end", values=registro)
 
         except sqlite3.Error as e:
             messagebox.showerror("Error", f"Error al filtrar los registros: {e}")
@@ -294,7 +315,7 @@ class App:
 
             # Obtener todos los registros de la base de datos activa
             cursor = self.db_connection.conn.cursor()
-            query = "SELECT Cid, cite_key, title, author, year, etiqueta, cumplimiento_de_criterios, referencia_apa, enlace FROM documentos"
+            query = "SELECT Cid, cite_key, title, author, year,scolr_tags, etiqueta, cumplimiento_de_criterios, referencia_apa, enlace FROM documentos"
             cursor.execute(query)
             rows = cursor.fetchall()
 
@@ -334,6 +355,24 @@ class App:
                 messagebox.showerror("Error", f"Hubo un problema al crear la base de datos: {str(e)}")
  
     
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    ######################################################
+    #  🚀 ZONA DE CLIC INTERACTIVA - HAZ CLIC AQUÍ      #
+    ######################################################
+
+        
+    
+    
     # Añade este nuevo método para manejar clics en el Treeview
   
 
@@ -343,9 +382,9 @@ class App:
         column = self.tree.identify_column(event.x)
 
         if region == "cell":
-            if column == "#9":  # Columna de enlaces
+            if column == "#10":  # Columna de enlaces
                 self.on_link_click(event)
-            elif column == "#10":  # Columna de acciones
+            elif column == "#11":  # Columna de acciones
                 self.on_action_click(event)
 
     def on_link_click(self, event):
@@ -358,19 +397,9 @@ class App:
         try:
             # Obtener el enlace desde la columna correspondiente
             item_values = self.tree.item(selected_item[0])["values"]
-            enlace = item_values[8]  # Índice 8: Columna 'Enlace'
-
-            if not enlace:
-                messagebox.showerror("Error", "No se encontró un enlace válido.")
-                return
-
-            # Verificar si el enlace es una URL o un path local
-            if enlace.startswith("http://") or enlace.startswith("https://"):
-                webbrowser.open(enlace)  # Abrir el enlace en el navegador
-            elif os.path.exists(enlace):
-                os.startfile(enlace)  # Abrir el archivo con el editor asociado
-            else:
-                messagebox.showerror("Error", "El enlace o archivo no es válido o no se puede abrir.")
+            enlace = item_values[9]  # Índice 9: Columna 'Enlace'
+            print(f"este es el enlace {enlace}")
+            self.open_file_grilla(enlace)
         except Exception as e:
             messagebox.showerror("Error", f"No se pudo abrir el enlace: {str(e)}")
 
@@ -400,10 +429,55 @@ class App:
         except Exception as e:
             messagebox.showerror("Error", f"No se pudo abrir el análisis: {str(e)}")
     
+    def open_file_grilla(self,enlace):
+            """Abre el enlace/archivo con el programa predeterminado"""
+            link = enlace
+            if not link:
+                return
+                
+            try:
+                # Si es una URL web
+                if link.startswith(('http://', 'https://')):
+                    import webbrowser
+                    webbrowser.open(link)
+                # Si es un archivo local
+                elif os.path.exists(link):
+                    if os.name == 'nt':  # Windows
+                        os.startfile(link)
+                    elif os.name == 'posix':  # macOS y Linux
+                        subprocess.run(['xdg-open', link])
+                else:
+                    messagebox.showwarning("Enlace no válido", "El enlace no es una URL válida o el archivo no existe")
+            except Exception as e:
+                messagebox.showerror("Error", f"No se pudo abrir el enlace: {e}")    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
     def crear_menu_contextual(self):
         # Crear el menú contextual
         self.menu_contextual = tk.Menu(self.master, tearoff=0)
         self.menu_contextual.add_command(label="Copiar selección como CSV", command=self.copiar_seleccion_como_csv)
+         # Copiar título del registro seleccionado
+        self.menu_contextual.add_command(label="Copiar Título", command=self.copiar_titulo_a_memoria)
+        self.menu_contextual.add_command(label="Editar Resumen", command=self.editar_resumen)
+        self.menu_contextual.add_command(label="Modificar Documento", command=self.update_document)
+        self.menu_contextual.add_command(label="Eliminar Documento", command=self.delete_document)
+
+
+
+
+
 
         # Vincular el evento de clic derecho al Treeview
         self.tree.bind("<Button-3>", self.mostrar_menu_contextual)  # Botón derecho del mouse
@@ -434,6 +508,79 @@ class App:
             messagebox.showinfo("Éxito", "Registros seleccionados copiados como CSV.")
         except Exception as e:
             messagebox.showerror("Error", f"No se pudo copiar los registros: {str(e)}")
+    
+    def copiar_titulo_a_memoria(self):
+        """Copia el título del registro seleccionado al portapapeles."""
+        selected_item = self.tree.selection()  # Obtener el registro seleccionado
+        if selected_item:
+            titulo = self.tree.item(selected_item, "values")[2]  # Extraer el título (columna índice 2)
+            self.master.clipboard_clear()  # Limpiar portapapeles
+            self.master.clipboard_append(titulo)  # Agregar el título al portapapeles
+            self.master.update()  # Actualizar para que el portapapeles refleje el cambio
+            
+    def editar_resumen(self):
+        """Abre una ventana emergente para editar el resumen del registro seleccionado."""
+        selected_item = self.tree.selection()
+        if not selected_item:
+            messagebox.showwarning("Advertencia", "Selecciona un registro para editar.")
+            return
+              # Obtener ID del registro seleccionado
+        item_values = self.tree.item(selected_item, "values")
+        registro_id = item_values[0]  # Primer valor es el ID
+        resumen_actual = self.obtener_resumen(registro_id)
+              # Crear ventana emergente
+        edit_window = tk.Toplevel(self.master)
+        edit_window.title("Editar Resumen")
+        edit_window.geometry("600x400")
+              # Área de texto para modificar resumen
+        text_widget = tk.Text(edit_window, wrap="word", font=("Arial", 10))
+        text_widget.pack(fill="both", expand=True, padx=10, pady=10)
+        text_widget.insert("1.0", resumen_actual)  # Cargar resumen actual
+        
+        
+        # Botón para guardar cambios
+        def guardar_cambios():
+             nuevo_resumen = text_widget.get("1.0", tk.END).strip()
+             self.actualizar_resumen(registro_id, nuevo_resumen)
+             edit_window.destroy()
+             
+        btn_guardar = ttk.Button(edit_window, text="Guardar Cambios", command=guardar_cambios)
+        btn_guardar.pack(pady=10)
+        
+        
+
+    def obtener_resumen(self, registro_id):
+        """Obtiene el resumen desde la base de datos."""
+        conn = sqlite3.connect(self.current_db_path)
+        cursor = conn.cursor()
+        cursor.execute("SELECT abstract FROM documentos WHERE Cid = ?", (registro_id,))
+        resultado = cursor.fetchone()
+        conn.close()
+        return resultado[0] if resultado else ""
+
+    def actualizar_resumen(self, registro_id, nuevo_resumen):
+        """Guarda el nuevo resumen en la base de datos."""
+        conn = sqlite3.connect(self.current_db_path)
+        cursor = conn.cursor()
+        cursor.execute("UPDATE documentos SET abstract = ? WHERE Cid = ?", (nuevo_resumen, registro_id))
+        conn.commit()
+        conn.close()
+
+        # Actualizar visualmente el registro en el Treeview
+        self.tree.item(self.tree.selection(), values=(registro_id, *self.tree.item(self.tree.selection(), "values")[1:-1], nuevo_resumen))
+
+        messagebox.showinfo("Éxito", "Resumen actualizado correctamente.")
+
+
+
+
+
+
+
+
+
+
+    
     
     
     def show_analysis_grid(self):
@@ -612,6 +759,68 @@ class App:
             self.refresh_documents_list()
         except Exception as e:
             messagebox.showerror("Error", f"Fallo al abrir ventana de importación: {str(e)}")
+   
+   
+    
+    def importar_archivos(self):
+        """Selecciona una carpeta y procesa todos los archivos dentro de ella y sus subdirectorios."""
+        carpeta_seleccionada = filedialog.askdirectory(title="Seleccionar carpeta para importar")
+        if not carpeta_seleccionada:
+            return
+
+        # Generar estructura del directorio
+        estructura = self.generar_mapa_carpeta(carpeta_seleccionada)
+
+        # Recorrer archivos y guardar cada uno en la base de datos
+        for root, _, archivos in os.walk(carpeta_seleccionada):
+            for archivo in archivos:
+                self.guardar_documento(archivo, root, estructura, carpeta_seleccionada)
+
+    def generar_mapa_carpeta(self, carpeta_base):
+        """Genera el mapa de directorios con formato especial."""
+        estructura = []
+        for root, dirs, files in os.walk(carpeta_base):
+            nivel = root.replace(carpeta_base, "").strip(os.sep)
+            indentacion = "│   " * nivel.count(os.sep)
+
+            # Agregar directorios y archivos con formato estructurado
+            estructura.append(f"{indentacion}{nivel}/")
+            for file in files:
+                estructura.append(f"{indentacion}│   {file}")
+
+        return "\n".join(estructura)
+
+    def guardar_documento(self, archivo, root, estructura, carpeta_base):
+        """Guarda la información en la base de datos por cada archivo encontrado."""
+        titulo = archivo  # Nombre del archivo como título
+        etiquetas = os.path.relpath(root, start=os.path.dirname(self.current_db_path)).split(os.sep)
+        path_archivo = os.path.join(root, archivo)  # Ruta completa del archivo
+
+        try:
+            conn = sqlite3.connect(self.current_db_path)
+            cursor = conn.cursor()
+
+            cursor.execute("""
+                INSERT INTO documentos (title, etiqueta, abstract, enlace)
+                VALUES (?, ?, ?, ?)
+            """, (titulo, ", ".join(etiquetas), estructura, path_archivo))
+
+            conn.commit()
+            conn.close()
+        except sqlite3.Error as e:
+            messagebox.showerror("Error", f"No se pudo importar el archivo {archivo}: {str(e)}")
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
     
       
     def create_document(self):
@@ -733,9 +942,6 @@ class App:
  
  
  
- 
- 
-
 
 
 import os
@@ -744,6 +950,8 @@ import tkinter as tk
 from tkinter import Button  # No ttk para dar color a los botones
 from tkinter import ttk, filedialog, messagebox
 from tkinter.font import Font
+
+
 
 class DocumentForm:
     def __init__(self, parent, mode, document_id=None,db_path =None):
@@ -756,12 +964,14 @@ class DocumentForm:
         # Configuración de la ventana
         self.window = tk.Toplevel(parent.master)
         self.window.title("?? Formulario de Documento")
-        self.window.geometry("800x700")
-        self.window.minsize(700, 600)
+        self.window.geometry("600x700")
+        self.window.minsize(600, 700)
         
         # Estilos y temas
         self.setup_styles()
         
+        # Iconos (puedes reemplazarlos con imágenes si lo prefieres)
+        #self.icons = { 'save': '💾', 'file': '📁', 'project': '📋', 'desc': '📝', 'open': '🔍' }
         # Iconos (puedes reemplazarlos con imágenes si lo prefieres)
         self.icons = {
             'save': '??',
@@ -805,7 +1015,7 @@ class DocumentForm:
         self.style.configure('TButton', font=('Arial', 10), padding=5)
         self.style.configure('Title.TLabel', font=('Arial', 12, 'bold'), foreground='#2c3e50')
         self.style.configure('Section.TFrame', relief=tk.GROOVE, borderwidth=2, padding=10)
-        self.style.configure('Accent.TButton', foreground='white', background='#3498db', font=('Arial', 10, 'bold'))
+        self.style.configure('Accent.TButton', foreground='white', background='#0066AA', font=('Arial', 10, 'bold'))
 
     def setup_main_frame(self):
         """Configura el frame principal con scrollbar"""
@@ -873,8 +1083,8 @@ class DocumentForm:
         self.abstract_text = tk.Text(
             text_frame, 
             wrap=tk.WORD, 
-            height=10, 
-            font=('Arial', 10),
+            height=6, 
+            font=('Arial', 8),
             padx=5,
             pady=5,
             yscrollcommand=scrollbar.set
