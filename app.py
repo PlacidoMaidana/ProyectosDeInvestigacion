@@ -10,7 +10,7 @@ from importar_enlaces import importar_enlaces
 import webbrowser
 import os
 from importar_texto import ImportarTextoVentana
-from IA_analisis import copiar_seleccion_como_csv, exportar_a_csv
+from IA_analisis import copiar_seleccion_como_csv, exportar_a_csv,modificar_metadatos,aplicar_metadatos_a_grupo
 from analysis_grid import AnalysisGrid
 from tkinter import PhotoImage #para el uso de otras imagenes como iconos
 
@@ -18,7 +18,9 @@ from tkinter import PhotoImage #para el uso de otras imagenes como iconos
 
 
 
-
+    ######################################################
+    #  🚀 ZONA DEL FORMULARIO PRINCIPAL                  #
+    ######################################################
 
 # Crear una instancia global (o puedes pasarla como parámetro)
 list_manager = ListManager()
@@ -71,7 +73,7 @@ class App:
         # Menú Importaciones
         self.import_menu = Menu(self.menu_bar, tearoff=0)
         self.import_menu.add_command(
-            label="Importar desde BibTeX",
+            label="Importar fuentes bibliográficas desde BibTeX",
             command=self.import_from_bib,
             state=tk.DISABLED  # Inicialmente deshabilitado
         )
@@ -87,8 +89,14 @@ class App:
         command=self.import_text_to_database,  # Llama al método intermedio
         state=tk.NORMAL  # Activado de forma predeterminada
         )
+        # IMPORTAR CAPTURA DE TABS, MAS INFOMRACION DEL REGISTRO
         self.import_menu.add_command(
-            label="Importar desde .bib",
+        label="Importar enlaces de busqueda",  # Título del menú
+        command=self.import_enlaces_database,  # Llama al método intermedio
+        state=tk.NORMAL  # Activado de forma predeterminada
+        )
+        self.import_menu.add_command(
+            label="Evaluación AI y actualización de datos",
             command=lambda: ImportarBibVentana(self.master, self.current_db_path),
             state=tk.NORMAL
         )
@@ -133,6 +141,15 @@ class App:
         ).pack(side=tk.LEFT, padx=5)  # Coloca el botón a la derecha del ComboBox con margen horizontal
         
         
+        self.search_entry = ttk.Entry(combo_frame, width=40)
+        self.search_entry.pack(side="left", padx=5)
+
+        search_button = ttk.Button(combo_frame, text="Buscar", command=self.filtrar_por_texto)
+        search_button.pack(side="left", padx=5)
+
+        self.record_count_label = ttk.Label(combo_frame, text="Registros: 0")
+        self.record_count_label.pack(side="left", padx=10)
+
         
 
         # Configurar Treeview
@@ -140,7 +157,7 @@ class App:
         tree_frame.pack(fill="both", expand=True)
         self.tree = ttk.Treeview(
             tree_frame,
-            columns=("Cid", "CiteKey", "Title", "Author", "Year","scolr_tags" ,"Etiqueta", "Cumplimiento", "ReferenciaAPA","Enlace", "Actions"),
+            columns=("Cid", "CiteKey", "Title", "Author", "Year","Abstract","scolr_tags" ,"Etiqueta", "Cumplimiento", "ReferenciaAPA","Enlace", "Actions"),
             show="headings",
             selectmode="extended"  # Permitir selección múltiple
         )
@@ -149,6 +166,7 @@ class App:
         self.tree.heading("Title", text="Título")
         self.tree.heading("Author", text="Autor")
         self.tree.heading("Year", text="Año")
+        self.tree.heading("Abstract", text="Abstract")
         self.tree.heading("scolr_tags", text="scolr_tags")
         self.tree.heading("Etiqueta", text="Etiqueta")
         self.tree.heading("Cumplimiento", text="Cumplimiento de Criterios")
@@ -161,6 +179,7 @@ class App:
         self.tree.column("Title", width=200, anchor="center")
         self.tree.column("Author", width=150, anchor="center")
         self.tree.column("Year", width=80, anchor="center")
+        self.tree.column("Abstract", width=80, anchor="center")
         self.tree.column("scolr_tags", width=80, anchor="center")
         self.tree.column("Etiqueta", width=100, anchor="center")
         self.tree.column("Cumplimiento", width=150, anchor="center")
@@ -213,7 +232,9 @@ class App:
 
 
 
-
+    ######################################################
+    #  🚀 ZONA DE FILTROS                                #
+    ######################################################
 
 
 
@@ -244,11 +265,11 @@ class App:
 
             # Construir la consulta SQL
             if etiqueta_seleccionada == "Todos":
-                query = "SELECT  Cid, cite_key, title, author, year,scolr_tags, etiqueta, cumplimiento_de_criterios, referencia_apa, enlace FROM documentos"
+                query = "SELECT  Cid, cite_key, title, author, year,abstract,scolr_tags, etiqueta, cumplimiento_de_criterios, referencia_apa, enlace FROM documentos"
                 cursor.execute(query)
             else:
                 query = """
-                    SELECT  Cid, cite_key, title, author, year,scolr_tags, etiqueta, cumplimiento_de_criterios, referencia_apa, enlace
+                    SELECT  Cid, cite_key, title, author, year,abstract,scolr_tags, etiqueta, cumplimiento_de_criterios, referencia_apa, enlace
                     FROM documentos
                     WHERE etiqueta = ?
                 """
@@ -256,6 +277,8 @@ class App:
 
             # Obtener los resultados
             registros = cursor.fetchall()
+            # Actualizar el contador de registros
+            self.record_count_label.config(text=f"Registros: {len(registros)}")
 
             # Limpiar el Treeview antes de cargar los nuevos datos
             for item in self.tree.get_children():
@@ -283,9 +306,76 @@ class App:
             if conn:
                 conn.close()
 
+    def filtrar_por_texto(self):
+        """Filtra los registros en el Treeview según el texto ingresado."""
+        texto_ingresado = self.search_entry.get().strip()
+    
+        # Conectar a la base de datos
+        try:
+            conn = sqlite3.connect(self.current_db_path)
+            cursor = conn.cursor()
+    
+            # Construir la consulta SQL con LIKE para buscar en múltiples columnas
+            query = """
+                SELECT Cid, cite_key, title, author, year, abstract, scolr_tags, etiqueta,
+                       cumplimiento_de_criterios, referencia_apa, enlace
+                FROM documentos
+                WHERE Cid LIKE ? OR cite_key LIKE ? OR title LIKE ? OR author LIKE ?
+                      OR year LIKE ? OR abstract LIKE ? OR scolr_tags LIKE ? OR etiqueta LIKE ?
+                      OR cumplimiento_de_criterios LIKE ? OR referencia_apa LIKE ? OR enlace LIKE ?
+            """
+            
+            # Parámetros para la consulta (agregar % para búsqueda parcial)
+            parametros = tuple(f"%{texto_ingresado}%" for _ in range(11))
+            cursor.execute(query, parametros)
+    
+            # Obtener los resultados
+            registros = cursor.fetchall()
+    
+            # Limpiar el Treeview antes de cargar los nuevos datos
+            for item in self.tree.get_children():
+                self.tree.delete(item)
+    
+            # Insertar los resultados en el Treeview
+            for i, row in enumerate(registros):
+                tag = "odd_row" if i % 2 == 0 else "even_row"
+                self.tree.insert("", "end", values=(*row, "📝 Analizar"), tags=(tag,))
+    
+            # Configurar estilos de filas alternadas
+            self.tree.tag_configure("odd_row", background="#F0F0F0")
+            self.tree.tag_configure("even_row", background="#FFFFFF")
+    
+            # Actualizar el contador de registros
+            self.record_count_label.config(text=f"Registros: {len(registros)}")
 
 
+    
+        except sqlite3.Error as e:
+            messagebox.showerror("Error", f"Error al filtrar los registros: {e}")
+        finally:
+            if conn:
+                conn.close()
 
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+
+
+    ######################################################
+    #  🚀 ZONA DE BASES DE DATOS                         #
+    ######################################################
 
 
 
@@ -315,9 +405,13 @@ class App:
 
             # Obtener todos los registros de la base de datos activa
             cursor = self.db_connection.conn.cursor()
-            query = "SELECT Cid, cite_key, title, author, year,scolr_tags, etiqueta, cumplimiento_de_criterios, referencia_apa, enlace FROM documentos"
+            query = "SELECT Cid, cite_key, title, author, year, abstract,scolr_tags, etiqueta, cumplimiento_de_criterios, referencia_apa, enlace FROM documentos"
             cursor.execute(query)
             rows = cursor.fetchall()
+            
+            # Actualizar el contador de registros
+            self.record_count_label.config(text=f"Registros: {len(rows)}")
+            self.list_manager.actualizar_combobox(self.filter_combobox, "etiquetas.csv", valor_predeterminado="Todos")
 
             # Insertar cada registro en el Treeview con colores alternados
             for i, row in enumerate(rows):
@@ -382,9 +476,9 @@ class App:
         column = self.tree.identify_column(event.x)
 
         if region == "cell":
-            if column == "#10":  # Columna de enlaces
+            if column == "#11":  # Columna de enlaces
                 self.on_link_click(event)
-            elif column == "#11":  # Columna de acciones
+            elif column == "#12":  # Columna de acciones
                 self.on_action_click(event)
 
     def on_link_click(self, event):
@@ -397,7 +491,7 @@ class App:
         try:
             # Obtener el enlace desde la columna correspondiente
             item_values = self.tree.item(selected_item[0])["values"]
-            enlace = item_values[9]  # Índice 9: Columna 'Enlace'
+            enlace = item_values[10]  # Índice 9: Columna 'Enlace'
             print(f"este es el enlace {enlace}")
             self.open_file_grilla(enlace)
         except Exception as e:
@@ -462,12 +556,19 @@ class App:
     
     
     
-    
+     ######################################################
+    #  🚀 MENU CONTEXTUAL SOBRE EL TREE VIEW             #
+    ######################################################
+
     
     def crear_menu_contextual(self):
         # Crear el menú contextual
         self.menu_contextual = tk.Menu(self.master, tearoff=0)
         self.menu_contextual.add_command(label="Copiar selección como CSV", command=self.copiar_seleccion_como_csv)
+        self.menu_contextual.add_command(label="Modificar metadatos", command=self.modificar_metadatos_desde_app)
+        self.menu_contextual.add_command(label="Modificar metadatos al grupo", command=self.aplicar_metadatos_a_grupo_app)
+
+
          # Copiar título del registro seleccionado
         self.menu_contextual.add_command(label="Copiar Título", command=self.copiar_titulo_a_memoria)
         self.menu_contextual.add_command(label="Editar Resumen", command=self.editar_resumen)
@@ -509,6 +610,22 @@ class App:
         except Exception as e:
             messagebox.showerror("Error", f"No se pudo copiar los registros: {str(e)}")
     
+    
+    def modificar_metadatos_desde_app(self):
+        """Llama a la función para modificar metadatos desde el menú contextual."""
+        modificar_metadatos(self.tree, self.current_db_path, self.master)
+
+    def aplicar_metadatos_a_grupo_app(self):
+        """Llama a la función para modificar metadatos desde el menú contextual."""
+        aplicar_metadatos_a_grupo(self.tree, self.current_db_path, self.master)
+
+    
+    
+    
+    
+    
+    
+    
     def copiar_titulo_a_memoria(self):
         """Copia el título del registro seleccionado al portapapeles."""
         selected_item = self.tree.selection()  # Obtener el registro seleccionado
@@ -518,34 +635,63 @@ class App:
             self.master.clipboard_append(titulo)  # Agregar el título al portapapeles
             self.master.update()  # Actualizar para que el portapapeles refleje el cambio
             
+
+
+    def guardar_cambios(self, edit_window, text_widget, registro_id):
+        nuevo_resumen = text_widget.get("1.0", tk.END).strip()
+        self.actualizar_resumen(registro_id, nuevo_resumen)
+        edit_window.destroy()
+        
+        
     def editar_resumen(self):
-        """Abre una ventana emergente para editar el resumen del registro seleccionado."""
         selected_item = self.tree.selection()
         if not selected_item:
             messagebox.showwarning("Advertencia", "Selecciona un registro para editar.")
             return
-              # Obtener ID del registro seleccionado
+
         item_values = self.tree.item(selected_item, "values")
-        registro_id = item_values[0]  # Primer valor es el ID
+        registro_id = item_values[0]
         resumen_actual = self.obtener_resumen(registro_id)
-              # Crear ventana emergente
+
+        # Crear ventana emergente
         edit_window = tk.Toplevel(self.master)
         edit_window.title("Editar Resumen")
         edit_window.geometry("600x400")
-              # Área de texto para modificar resumen
-        text_widget = tk.Text(edit_window, wrap="word", font=("Arial", 10))
-        text_widget.pack(fill="both", expand=True, padx=10, pady=10)
-        text_widget.insert("1.0", resumen_actual)  # Cargar resumen actual
+
+        # Configurar el grid para que el área de texto se expanda
+        edit_window.grid_rowconfigure(1, weight=1)
+        edit_window.grid_columnconfigure(0, weight=1)
+
+        # Botón para guardar cambios en la primera fila
+        btn_guardar = ttk.Button(edit_window, text="Guardar Cambios", command=lambda: self.guardar_cambios(edit_window, text_widget, registro_id))
+        btn_guardar.grid(row=0, column=0, padx=10, pady=10, sticky="ew")
+
+        # Crear un frame para organizar el área de texto y el scrollbar en la segunda fila
+        text_frame = tk.Frame(edit_window)
+        text_frame.grid(row=1, column=0, padx=10, pady=(0,10), sticky="nsew")
+        text_frame.grid_rowconfigure(0, weight=1)
+        text_frame.grid_columnconfigure(0, weight=1)
+
+        # Crear scrollbar
+        scrollbar = tk.Scrollbar(text_frame)
+        scrollbar.grid(row=0, column=1, sticky="ns")
+
+        # Área de texto con barra de desplazamiento
+        text_widget = tk.Text(text_frame, wrap="word", font=("Arial", 10), yscrollcommand=scrollbar.set)
+        text_widget.grid(row=0, column=0, sticky="nsew")
+
+        scrollbar.config(command=text_widget.yview)
+
+        # Cargar resumen actual
+        text_widget.insert("1.0", resumen_actual)
+
+    
         
         
-        # Botón para guardar cambios
-        def guardar_cambios():
-             nuevo_resumen = text_widget.get("1.0", tk.END).strip()
-             self.actualizar_resumen(registro_id, nuevo_resumen)
-             edit_window.destroy()
-             
-        btn_guardar = ttk.Button(edit_window, text="Guardar Cambios", command=guardar_cambios)
-        btn_guardar.pack(pady=10)
+        
+        
+        
+        
         
         
 
@@ -727,20 +873,26 @@ class App:
 
             # Consulta segura con nombres de columnas explícitos
             safe_query = """
-                SELECT "Cid", "cite_key", "title", "author", "year", 
-                       "etiqueta", "cumplimiento_de_criterios", "referencia_apa", "enlace" 
+                SELECT  Cid, cite_key, title, author, year, abstract,scolr_tags,
+                        etiqueta, cumplimiento_de_criterios, referencia_apa, enlace                        
                 FROM "documentos"
                 ORDER BY "Cid" DESC
             """
             cursor.execute(safe_query)
+            registros=cursor.fetchall()
+
 
             # Insertar los datos en el Treeview
-            for row in cursor.fetchall():
+            for row in registros:
                 # Asegurar que todos los valores sean strings
                 safe_row = [str(item) if item is not None else "" for item in row]
                 self.tree.insert("", "end", values=(*safe_row, "📝 Analizar"))
 
             conn.close()
+            
+            # Actualizar el contador de registros
+            self.record_count_label.config(text=f"Registros: {len(registros)}")
+
 
         except sqlite3.Error as e:
             messagebox.showerror("Error", f"No se pudieron cargar los documentos: {str(e)}")
@@ -756,6 +908,18 @@ class App:
             # Crear una ventana modal para importar texto
             from importar_texto import ImportarTextoVentana
             ImportarTextoVentana(self.master, self.current_db_path)  # Pasar la ventana principal y el path de la base
+            self.refresh_documents_list()
+        except Exception as e:
+            messagebox.showerror("Error", f"Fallo al abrir ventana de importación: {str(e)}")
+   
+    def import_enlaces_database(self):
+        if not self.current_db_path:
+            messagebox.showerror("Error", "Primero abra una base de datos.")
+            return
+        try:
+            # Crear una ventana modal para importar texto
+            from importar_texto import CapturaInteligenteEnlaces
+            CapturaInteligenteEnlaces(self.master, self.current_db_path)  # Pasar la ventana principal y el path de la base
             self.refresh_documents_list()
         except Exception as e:
             messagebox.showerror("Error", f"Fallo al abrir ventana de importación: {str(e)}")
@@ -853,56 +1017,58 @@ class App:
             except Exception as e:
                 messagebox.showerror("Error", f"No se pudo abrir para edición: {str(e)}")
                 print("Error completo:", traceback.format_exc())
-        
+     
+     
         
     def delete_document(self):
-        """Elimina un documento seleccionado"""
-        selected_item = self.tree.selection()
+        """Elimina los documentos seleccionados"""
+        selected_items = self.tree.selection()
 
-        if not selected_item:
-            messagebox.showwarning("Advertencia", "Por favor selecciona un documento.")
+        if not selected_items:
+            messagebox.showwarning("Advertencia", "Por favor selecciona al menos un documento.")
             return
 
         try:
-            item_values = self.tree.item(selected_item[0])["values"]
+            # Obtener los IDs de los documentos seleccionados
+            document_ids = []
+            for item in selected_items:
+                item_values = self.tree.item(item)["values"]
+                if item_values and len(item_values) > 0:
+                    document_ids.append(item_values[0])  # Cid es la primera columna
 
-            if not item_values or len(item_values) < 1:
-                messagebox.showerror("Error", "El documento seleccionado no tiene datos válidos.")
+            if not document_ids:
+                messagebox.showerror("Error", "Los documentos seleccionados no tienen datos válidos.")
                 return
-
-            document_id = item_values[0]  # Cid es la primera columna
 
             # Confirmar antes de eliminar
             confirm = messagebox.askyesno(
                 "Confirmar eliminación",
-                f"¿Estás seguro de querer eliminar el documento con ID {document_id}?"
+                f"¿Estás seguro de querer eliminar {len(document_ids)} documentos?"
             )
 
             if not confirm:
                 return
 
-            #conn = connect_to_db(self.current_db_path)  # Usar la variable de instancia
-            # Obtener la base de datos activa
+            # Conectar a la base de datos
             cursor = self.db_connection.conn.cursor()
-            
-            #cursor = conn.cursor()
 
-            # Usar el nombre correcto de la columna (Cid)
-            cursor.execute("DELETE FROM documentos WHERE Cid = ?", (document_id,))
-            
+            # Eliminar los documentos seleccionados
+            cursor.executemany("DELETE FROM documentos WHERE Cid = ?", [(doc_id,) for doc_id in document_ids])
+
             self.db_connection.conn.commit()
             self.db_connection.conn.close()
-            #conn.commit()
-            #conn.close()
 
             self.load_documents()
-            messagebox.showinfo("Éxito", "Documento eliminado exitosamente.")
+            messagebox.showinfo("Éxito", "Documentos eliminados exitosamente.")
 
         except sqlite3.Error as e:
             messagebox.showerror("Error", f"Error de base de datos: {str(e)}")
         except Exception as e:
             messagebox.showerror("Error", f"Error inesperado: {str(e)}")
-        
+
+
+
+       
         
     def open_analysis_form(self, event):
         # Abrir la ficha de análisis para un documento seleccionado
